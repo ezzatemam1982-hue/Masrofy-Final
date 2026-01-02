@@ -8,6 +8,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import threading
 import base64  # 👈 مكتبة جديدة لدمج الصورة في المقدمة
+st.set_page_config(page_title="الماسة", page_icon="💎")
 
 # --- 0. إعداد المتغيرات ---
 ICON_FILE = "diamond_icon.png" 
