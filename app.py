@@ -19,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. تعريف المسارات والمتغيرات ---
+# --- 2. المتغيرات ---
 LOCAL_DATA_FILE = "finance_data_v28.csv"
 ATTACHMENTS_DIR = "attachments"
 SHEET_NAME = "Masrofy_DB"
@@ -46,7 +46,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. الدوال المساعدة ---
+# --- 4. الدوال ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
@@ -69,8 +69,8 @@ def load_data_local():
 def save_data_local(df):
     df.to_csv(LOCAL_DATA_FILE, index=False)
 
-# دالة الرفع المباشر (Synchronous)
 def sync_to_google_direct(row_dict):
+    """رفع مباشر لجوجل شيت مع انتظار النتيجة"""
     if os.path.exists(CREDS_FILE):
         try:
             creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope=SCOPE)
@@ -79,10 +79,10 @@ def sync_to_google_direct(row_dict):
             values = [
                 str(row_dict.get("التاريخ").date()), str(row_dict.get("السنة")), str(row_dict.get("الشهر")), 
                 str(row_dict.get("النوع")), str(row_dict.get("البند")), str(row_dict.get("طريقة الدفع")), 
-                str(row_dict.get("المبلغ")), str(row_dict.get("ملاحظات", "")), "تطبيق V3.1"
+                str(row_dict.get("المبلغ")), str(row_dict.get("ملاحظات", "")), "تطبيق V3.2"
             ]
             sheet.append_row(values)
-            return True, "تم الرفع بنجاح"
+            return True, "تم"
         except Exception as e:
             return False, str(e)
     else:
@@ -170,7 +170,11 @@ with tab2:
     c1, c2 = st.columns([1,1])
     with c1: cat_sel = st.selectbox("التصنيف:", cat_l)
     cust_cat = ""
-    if "أخرى" in cat_sel: with c2: cust_cat = st.text_input("اسم المصروف:")
+    
+    # --- تصحيح الخطأ هنا: فصلنا السطور ---
+    if "أخرى" in cat_sel: 
+        with c2: 
+            cust_cat = st.text_input("اسم المصروف:")
     
     with st.form("entry", clear_on_submit=True):
         st.markdown("---")
@@ -203,8 +207,8 @@ with tab2:
             df = pd.concat([df, pd.DataFrame([row_dict])], ignore_index=True)
             save_data_local(df)
             
-            # 2. الرفع المباشر (Synchronous) - الحل الأكيد
-            with st.spinner("⏳ جاري الحفظ في جوجل شيت..."):
+            # 2. الرفع المباشر (أمام عينك)
+            with st.spinner("⏳ جاري الإرسال لجوجل شيت..."):
                 success, msg = sync_to_google_direct(row_dict)
                 
             if success:
@@ -212,8 +216,8 @@ with tab2:
                 time.sleep(1)
                 st.rerun()
             else:
-                st.warning(f"⚠️ تم الحفظ محلياً فقط. فشل جوجل: {msg}")
-                time.sleep(3) # وقت عشان تقرأ الخطأ لو حصل
+                st.warning(f"⚠️ تم الحفظ على الجهاز فقط. فشل جوجل: {msg}")
+                time.sleep(3)
 
 with tab3:
     if not df.empty:
@@ -230,4 +234,5 @@ with tab3:
 
 st.markdown("---")
 st.caption("Masrofy App v3.0 | Developed by Ezzat Emam")
+
 
