@@ -32,7 +32,7 @@ if not os.path.exists(ATTACHMENTS_DIR): os.makedirs(ATTACHMENTS_DIR)
 if 'current_mode' not in st.session_state: st.session_state['current_mode'] = "مصروفات"
 def update_mode(): st.session_state['current_mode'] = st.session_state.mode_selector
 
-# --- 3. ستايل CSS ---
+# --- 3. CSS (تحسين المظهر) ---
 st.markdown("""
 <style>
     .main {direction: rtl;}
@@ -43,18 +43,6 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] { gap: 10px; justify-content: center; }
     .stTabs [data-baseweb="tab"] { height: 50px; background-color: #f0f2f6; border-radius: 10px; color: #000; font-weight: bold; flex: 1; }
     .stTabs [aria-selected="true"] { background-color: #2ecc71 !important; color: white !important; }
-    
-    #splash-screen {
-        position: fixed;
-        top: 0; left: 0;
-        width: 100vw; height: 100vh;
-        background-color: #ffffff;
-        z-index: 9999999;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-    }
     
     .stDownloadButton button {
         width: 100%;
@@ -67,7 +55,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 4. دوال المساعدة ---
-
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -106,23 +93,16 @@ def sync_to_google_forced_task(row_dict):
         except Exception as e:
             print(f"Sync Error: {e}")
 
-# --- 5. شاشة الترحيب ---
+# --- 5. شاشة التحميل ---
 if 'first_load' not in st.session_state: st.session_state['first_load'] = True
 if st.session_state['first_load']:
     splash = st.empty()
     img_base64 = get_base64_image(ICON_FILE)
     logo_html = f'<img src="data:image/png;base64,{img_base64}" width="150" style="margin-bottom: 20px;">' if img_base64 else '<div style="font-size: 100px; margin-bottom: 20px;">💎</div>'
-
-    splash_html = f"""
-    <div id="splash-screen">
-        {logo_html}
-        <h1 style="color: #2ecc71; font-family: 'Segoe UI'; font-size: 3rem; margin: 0;">مصروفي</h1>
-        <h3 style="color: #7f8c8d; font-family: 'Segoe UI'; margin-top: 10px;">...جاري التحميل</h3>
-    </div>
-    """
     with splash.container():
-        st.markdown(splash_html, unsafe_allow_html=True)
-        time.sleep(1.5)
+        st.markdown(f"""<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#fff;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        {logo_html}<h1 style="color:#2ecc71;">مصروفي</h1></div>""", unsafe_allow_html=True)
+        time.sleep(1.0)
         splash.empty()
         st.session_state['first_load'] = False
 
@@ -146,40 +126,35 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- القائمة الجانبية (تم إصلاح العرض) ---
-if os.path.exists(ICON_FILE):
-    st.sidebar.image(ICON_FILE, width=100)
-else:
-    st.sidebar.title("💎")
+# --- القائمة الجانبية (خاصة بالداتا فقط) ---
+if os.path.exists(ICON_FILE): st.sidebar.image(ICON_FILE, width=100)
+else: st.sidebar.title("💎")
 
-with st.sidebar.expander("⚙️ إدارة البيانات (حفظ واسترجاع)", expanded=True):
+with st.sidebar.expander("⚙️ إدارة قاعدة البيانات (CSV)", expanded=True):
     # زر الحفظ
     csv_data = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="💾 حفظ البيانات (Backup)",
-        data=csv_data,
-        file_name=f"Masrofy_Backup_{datetime.now().strftime('%Y-%m-%d')}.csv",
-        mime="text/csv"
-    )
+    st.download_button(label="💾 حفظ نسخة احتياطية", data=csv_data, file_name=f"Masrofy_Backup_{datetime.now().strftime('%Y-%m-%d')}.csv", mime="text/csv")
     
     st.markdown("---")
     
-    # زر الاسترجاع
-    uploaded_file = st.file_uploader("📂 استرجاع نسخة قديمة")
+    # زر الاسترجاع (للملفات النصية فقط)
+    # ملاحظة: شلت الـ type restriction عشان يظهرلك كل الملفات وتختار الـ CSV براحتك لو كان باهت
+    uploaded_file = st.file_uploader("📂 استرجاع ملف بيانات") 
     if uploaded_file is not None:
         if st.button("⚠️ تأكيد الاستبدال"):
             try:
+                # محاولة قراءة الملف كـ CSV
                 uploaded_df = pd.read_csv(uploaded_file)
                 required = ["التاريخ", "النوع", "المبلغ"]
                 if any(col in uploaded_df.columns for col in required):
                     uploaded_df.to_csv(LOCAL_DATA_FILE, index=False)
-                    st.success("✅ تم الاسترجاع!")
+                    st.success("✅ تم استرجاع قاعدة البيانات!")
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("❌ الملف غير مطابق!")
+                    st.error("❌ هذا ليس ملف بيانات صحيح (يجب أن يكون CSV).")
             except Exception as e:
-                st.error(f"خطأ: {e}")
+                st.error("❌ خطأ: تأكد أنك تختار ملف CSV وليس صورة.")
 
 # --- الفلاتر ---
 today = datetime.now()
@@ -195,7 +170,7 @@ with st.expander("📅 إعدادات الفلترة", expanded=False):
 # --- التبويبات ---
 tab1, tab2, tab3 = st.tabs(["📊 لوحة القيادة", "📝 تسجيل جديد", "📂 السجل"])
 
-# === التبويب 1 ===
+# === التبويب 1: لوحة القيادة (تمت إعادة رسمة الدخل) ===
 with tab1:
     if not df.empty and "التاريخ" in df.columns:
         mask = (df["الشهر"] == int(view_month)) & (df["السنة"] == int(view_year))
@@ -213,15 +188,29 @@ with tab1:
         c4.metric("✅ الرصيد", f"{balance:,.0f}", delta_color="normal" if balance >= 0 else "inverse")
         
         st.divider()
+        
+        # --- هنا التصحيح: إظهار الرسمتين (المصاريف والدخل) ---
         col_chart1, col_chart2 = st.columns(2)
+        
         with col_chart1:
             st.subheader("توزيع المصاريف")
             outgoing = month_df[month_df["النوع"].str.contains("مصروف|قسط", regex=True, na=False)]
-            if not outgoing.empty: st.plotly_chart(px.pie(outgoing, values='المبلغ', names='البند', hole=0.4), use_container_width=True)
+            if not outgoing.empty: 
+                fig1 = px.pie(outgoing, values='المبلغ', names='البند', hole=0.4)
+                st.plotly_chart(fig1, use_container_width=True)
             else: st.info("لا توجد مصاريف.")
+            
+        with col_chart2:
+            st.subheader("مصادر الدخل")
+            income_data = month_df[month_df["النوع"] == "دخل"]
+            if not income_data.empty: 
+                fig2 = px.bar(income_data, x="البند", y="المبلغ", color="البند")
+                st.plotly_chart(fig2, use_container_width=True)
+            else: st.info("لا يوجد دخل مسجل.")
+            
     else: st.info("👋 مرحباً! السجل فارغ.")
 
-# === التبويب 2 (تصحيح الخطأ هنا) ===
+# === التبويب 2: تسجيل جديد (المرفقات صور فقط) ===
 with tab2:
     st.subheader("➕ إضافة معاملة")
     options = ["مصروفات", "دخل", "قسط"]
@@ -236,11 +225,8 @@ with tab2:
     c_s1, c_s2 = st.columns([1,1])
     with c_s1: cat_sel = st.selectbox("التصنيف:", cat_l)
     cust_cat = ""
-    
-    # ✅ تم التصحيح: فصلنا السطرين عن بعض
     if "أخرى" in cat_sel: 
-        with c_s2: 
-            cust_cat = st.text_input("اسم المصروف:")
+        with c_s2: cust_cat = st.text_input("اسم المصروف:")
     
     with st.form("entry", clear_on_submit=True):
         st.markdown("---")
@@ -254,8 +240,9 @@ with tab2:
             pay = st.selectbox("دفع", pay_l)
             dsc = st.text_input("ملاحظة")
         
-        with st.expander("📎 إرفاق فاتورة"):
-            upl = st.file_uploader("ملف", type=["png", "jpg", "jpeg", "pdf"])
+        # --- هنا المنطق الصحيح: المرفقات صور وملفات PDF فقط ---
+        with st.expander("📎 إرفاق صورة الفاتورة (اختياري)"):
+            upl = st.file_uploader("التقاط صورة أو اختيار ملف", type=["png", "jpg", "jpeg", "pdf"])
 
         if st.form_submit_button("💾 حفظ البيانات", use_container_width=True):
             fin_cat = cust_cat.strip() if ("أخرى" in cat_sel and cust_cat) else cat_sel
