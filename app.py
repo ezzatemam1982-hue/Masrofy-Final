@@ -165,7 +165,7 @@ with st.sidebar.expander("⚙️ إدارة البيانات (حفظ واستر�
     st.markdown("---")
     
     # زر الاسترجاع
-    uploaded_file = st.file_uploader("📂 استرجاع نسخة قديمة", type=["csv"])
+    uploaded_file = st.file_uploader("📂 استرجاع نسخة قديمة")
     if uploaded_file is not None:
         if st.button("⚠️ تأكيد الاستبدال"):
             try:
