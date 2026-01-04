@@ -19,8 +19,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. المتغيرات والمسارات (الحل الجذري للمسار) ---
-# بنجيب مكان الملف الحالي عشان نضمن إنه يشوف المفاتيح جنبه
+# --- 2. المتغيرات والمسارات ---
+# تثبيت المسار بدقة عشان Streamlit Cloud
 current_dir = os.path.dirname(os.path.abspath(__file__))
 CREDS_FILE = os.path.join(current_dir, "credentials.json")
 ATTACHMENTS_DIR = os.path.join(current_dir, "attachments")
@@ -72,26 +72,24 @@ def save_data_local(df):
     df.to_csv(LOCAL_DATA_FILE, index=False)
 
 def sync_to_google_direct(row_dict):
-    """رفع مباشر مع تحديد المسار بدقة"""
-    # طباعة المسار للتأكد في الترمينال
-    print(f"Using Credentials at: {CREDS_FILE}")
-    
+    """رفع مباشر مع التصحيح الجديد"""
     if os.path.exists(CREDS_FILE):
         try:
-            creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope=SCOPE)
+            # ✅ التعديل هنا: استخدمنا scopes بدل scope
+            creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scopes=SCOPE)
             client = gspread.authorize(creds)
             sheet = client.open(SHEET_NAME).sheet1
             values = [
                 str(row_dict.get("التاريخ").date()), str(row_dict.get("السنة")), str(row_dict.get("الشهر")), 
                 str(row_dict.get("النوع")), str(row_dict.get("البند")), str(row_dict.get("طريقة الدفع")), 
-                str(row_dict.get("المبلغ")), str(row_dict.get("ملاحظات", "")), "تطبيق V3.3"
+                str(row_dict.get("المبلغ")), str(row_dict.get("ملاحظات", "")), "تطبيق V3.4"
             ]
             sheet.append_row(values)
             return True, "تم"
         except Exception as e:
             return False, str(e)
     else:
-        return False, f"الملف غير موجود في: {CREDS_FILE}"
+        return False, f"ملف المفاتيح غير موجود: {CREDS_FILE}"
 
 # --- 5. القوائم ---
 INCOME_CATEGORIES = ["💰 راتب (نص الشهر)", "💰 راتب (اخر الشهر)", "🏠 إيراد إيجار شقة", "🏆 مكافأة أرباح سنوية", "🎁 مكافأة أخرى / إضافية", "💊 استرداد علاج", "💼 استرداد مأموريات عمل", "➕ أخرى"]
@@ -207,11 +205,9 @@ with tab2:
                 "المبلغ": float(amt), "ملاحظات": dsc, "المرفق": fp
             }
             
-            # 1. حفظ محلي
             df = pd.concat([df, pd.DataFrame([row_dict])], ignore_index=True)
             save_data_local(df)
             
-            # 2. رفع مباشر لجوجل
             with st.spinner("⏳ جاري الإرسال لجوجل شيت..."):
                 success, msg = sync_to_google_direct(row_dict)
                 
@@ -220,8 +216,7 @@ with tab2:
                 time.sleep(1)
                 st.rerun()
             else:
-                # الرسالة اللي أنت طلبتها بالضبط
-                st.warning(f"⚠️ تم الحفظ علي الجهاز وغشل جوجل شيت للاسف. السبب: {msg}")
+                st.warning(f"⚠️ خطأ في جوجل شيت: {msg}")
                 time.sleep(4)
 
 with tab3:
@@ -238,7 +233,8 @@ with tab3:
     else: st.info("السجل فارغ")
 
 st.markdown("---")
-st.caption("Masrofy App v3.0 | Developed by Ezzat Emam")
+st.caption("Masrofy App v1.0 | Developed by Ezzat Emam")
+
 
 
 
