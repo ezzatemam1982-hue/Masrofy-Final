@@ -19,11 +19,13 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. المتغيرات ---
-LOCAL_DATA_FILE = "finance_data_v28.csv"
-ATTACHMENTS_DIR = "attachments"
+# --- 2. المتغيرات والمسارات (الحل الجذري للمسار) ---
+# بنجيب مكان الملف الحالي عشان نضمن إنه يشوف المفاتيح جنبه
+current_dir = os.path.dirname(os.path.abspath(__file__))
+CREDS_FILE = os.path.join(current_dir, "credentials.json")
+ATTACHMENTS_DIR = os.path.join(current_dir, "attachments")
+LOCAL_DATA_FILE = os.path.join(current_dir, "finance_data_v28.csv")
 SHEET_NAME = "Masrofy_DB"
-CREDS_FILE = "credentials.json"
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 if not os.path.exists(ATTACHMENTS_DIR): os.makedirs(ATTACHMENTS_DIR)
@@ -70,7 +72,10 @@ def save_data_local(df):
     df.to_csv(LOCAL_DATA_FILE, index=False)
 
 def sync_to_google_direct(row_dict):
-    """رفع مباشر لجوجل شيت مع انتظار النتيجة"""
+    """رفع مباشر مع تحديد المسار بدقة"""
+    # طباعة المسار للتأكد في الترمينال
+    print(f"Using Credentials at: {CREDS_FILE}")
+    
     if os.path.exists(CREDS_FILE):
         try:
             creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope=SCOPE)
@@ -79,14 +84,14 @@ def sync_to_google_direct(row_dict):
             values = [
                 str(row_dict.get("التاريخ").date()), str(row_dict.get("السنة")), str(row_dict.get("الشهر")), 
                 str(row_dict.get("النوع")), str(row_dict.get("البند")), str(row_dict.get("طريقة الدفع")), 
-                str(row_dict.get("المبلغ")), str(row_dict.get("ملاحظات", "")), "تطبيق V3.2"
+                str(row_dict.get("المبلغ")), str(row_dict.get("ملاحظات", "")), "تطبيق V3.3"
             ]
             sheet.append_row(values)
             return True, "تم"
         except Exception as e:
             return False, str(e)
     else:
-        return False, "ملف credentials.json غير موجود"
+        return False, f"الملف غير موجود في: {CREDS_FILE}"
 
 # --- 5. القوائم ---
 INCOME_CATEGORIES = ["💰 راتب (نص الشهر)", "💰 راتب (اخر الشهر)", "🏠 إيراد إيجار شقة", "🏆 مكافأة أرباح سنوية", "🎁 مكافأة أخرى / إضافية", "💊 استرداد علاج", "💼 استرداد مأموريات عمل", "➕ أخرى"]
@@ -171,7 +176,6 @@ with tab2:
     with c1: cat_sel = st.selectbox("التصنيف:", cat_l)
     cust_cat = ""
     
-    # --- تصحيح الخطأ هنا: فصلنا السطور ---
     if "أخرى" in cat_sel: 
         with c2: 
             cust_cat = st.text_input("اسم المصروف:")
@@ -203,11 +207,11 @@ with tab2:
                 "المبلغ": float(amt), "ملاحظات": dsc, "المرفق": fp
             }
             
-            # 1. الحفظ المحلي
+            # 1. حفظ محلي
             df = pd.concat([df, pd.DataFrame([row_dict])], ignore_index=True)
             save_data_local(df)
             
-            # 2. الرفع المباشر (أمام عينك)
+            # 2. رفع مباشر لجوجل
             with st.spinner("⏳ جاري الإرسال لجوجل شيت..."):
                 success, msg = sync_to_google_direct(row_dict)
                 
@@ -216,8 +220,9 @@ with tab2:
                 time.sleep(1)
                 st.rerun()
             else:
-                st.warning(f"⚠️ تم الحفظ على الجهاز فقط. فشل جوجل: {msg}")
-                time.sleep(3)
+                # الرسالة اللي أنت طلبتها بالضبط
+                st.warning(f"⚠️ تم الحفظ علي الجهاز وغشل جوجل شيت للاسف. السبب: {msg}")
+                time.sleep(4)
 
 with tab3:
     if not df.empty:
@@ -234,5 +239,6 @@ with tab3:
 
 st.markdown("---")
 st.caption("Masrofy App v3.0 | Developed by Ezzat Emam")
+
 
 
