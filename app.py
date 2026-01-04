@@ -20,15 +20,17 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. إعداد المتغيرات ---
+# --- 2. تعريف المتغيرات (لازم تكون هنا في الأول) ---
 LOCAL_DATA_FILE = "finance_data_v28.csv"
 ATTACHMENTS_DIR = "attachments"
 SHEET_NAME = "Masrofy_DB"
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 CREDS_FILE = "credentials.json"
 
+# إنشاء مجلد المرفقات لو مش موجود
 if not os.path.exists(ATTACHMENTS_DIR): os.makedirs(ATTACHMENTS_DIR)
 
+# إعداد حالة التطبيق
 if 'current_mode' not in st.session_state: st.session_state['current_mode'] = "مصروفات"
 def update_mode(): st.session_state['current_mode'] = st.session_state.mode_selector
 
@@ -78,20 +80,32 @@ def load_data_local():
 def save_data_local(df):
     df.to_csv(LOCAL_DATA_FILE, index=False)
 
+# --- دالة الرفع لجوجل (مع رسائل التشخيص) ---
 def sync_to_google_forced_task(row_dict):
+    print(f"🔍 Checking credentials at: {os.path.abspath(CREDS_FILE)}")
+    
     if os.path.exists(CREDS_FILE):
         try:
+            print("⏳ Connecting to Google Sheets...")
             creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope=SCOPE)
             client = gspread.authorize(creds)
+            # محاولة فتح الشيت
             sheet = client.open(SHEET_NAME).sheet1
+            
             values = [
                 str(row_dict.get("التاريخ").date()), str(row_dict.get("السنة")), str(row_dict.get("الشهر")), 
                 str(row_dict.get("النوع")), str(row_dict.get("البند")), str(row_dict.get("طريقة الدفع")), 
-                str(row_dict.get("المبلغ")), str(row_dict.get("ملاحظات", "")), "تطبيق"
+                str(row_dict.get("المبلغ")), str(row_dict.get("ملاحظات", "")), "تطبيق V2"
             ]
             sheet.append_row(values)
+            print("✅ Success! Data sent to Google Sheet.")
         except Exception as e:
-            print(f"Sync Error: {e}")
+            print(f"❌ Google Sync Error: {e}")
+            # لو الخطأ ان الشيت مش موجود، انشئه
+            if "SpreadsheetNotFound" in str(e):
+                print(f"⚠️ Spreadsheet '{SHEET_NAME}' not found. Please create it in Google Drive.")
+    else:
+        print("⚠️ CRITICAL ERROR: 'credentials.json' file not found next to the script!")
 
 # --- 5. شاشة التحميل ---
 if 'first_load' not in st.session_state: st.session_state['first_load'] = True
@@ -138,7 +152,6 @@ with st.sidebar.expander("⚙️ إدارة قاعدة البيانات (CSV)", 
     st.markdown("---")
     
     # زر الاسترجاع (للملفات النصية فقط)
-    # ملاحظة: شلت الـ type restriction عشان يظهرلك كل الملفات وتختار الـ CSV براحتك لو كان باهت
     uploaded_file = st.file_uploader("📂 استرجاع ملف بيانات") 
     if uploaded_file is not None:
         if st.button("⚠️ تأكيد الاستبدال"):
@@ -170,7 +183,7 @@ with st.expander("📅 إعدادات الفلترة", expanded=False):
 # --- التبويبات ---
 tab1, tab2, tab3 = st.tabs(["📊 لوحة القيادة", "📝 تسجيل جديد", "📂 السجل"])
 
-# === التبويب 1: لوحة القيادة (تمت إعادة رسمة الدخل) ===
+# === التبويب 1: لوحة القيادة ===
 with tab1:
     if not df.empty and "التاريخ" in df.columns:
         mask = (df["الشهر"] == int(view_month)) & (df["السنة"] == int(view_year))
@@ -189,9 +202,7 @@ with tab1:
         
         st.divider()
         
-        # --- هنا التصحيح: إظهار الرسمتين (المصاريف والدخل) ---
         col_chart1, col_chart2 = st.columns(2)
-        
         with col_chart1:
             st.subheader("توزيع المصاريف")
             outgoing = month_df[month_df["النوع"].str.contains("مصروف|قسط", regex=True, na=False)]
@@ -210,7 +221,7 @@ with tab1:
             
     else: st.info("👋 مرحباً! السجل فارغ.")
 
-# === التبويب 2: تسجيل جديد (المرفقات صور فقط) ===
+# === التبويب 2: تسجيل جديد ===
 with tab2:
     st.subheader("➕ إضافة معاملة")
     options = ["مصروفات", "دخل", "قسط"]
@@ -240,7 +251,6 @@ with tab2:
             pay = st.selectbox("دفع", pay_l)
             dsc = st.text_input("ملاحظة")
         
-        # --- هنا المنطق الصحيح: المرفقات صور وملفات PDF فقط ---
         with st.expander("📎 إرفاق صورة الفاتورة (اختياري)"):
             upl = st.file_uploader("التقاط صورة أو اختيار ملف", type=["png", "jpg", "jpeg", "pdf"])
 
@@ -259,6 +269,8 @@ with tab2:
             
             df = pd.concat([df, pd.DataFrame([row_dict])], ignore_index=True)
             save_data_local(df)
+            
+            # تشغيل الرفع في الخلفية مع طباعة الحالة
             bg_thread = threading.Thread(target=sync_to_google_forced_task, args=(row_dict,))
             bg_thread.start()
             
@@ -283,4 +295,4 @@ with tab3:
     else: st.info("السجل فارغ.")
 
 st.markdown("---")
-st.caption("Masrofy App v1.0 | Developed by Ezzat Emam")
+st.caption("Masrofy App v2.0 | Developed by Ezzat Emam")
