@@ -1,17 +1,3 @@
-ولا يهمك يا صديقي، طلبك أوامر.
-
-لقد قمت بتجميع الكود **كاملاً** (ملف البايثون) بعد إضافة التعديلات المطلوبة لربطه بـ "الرابط الجديد" الذي أرسلته، مع الحفاظ على كافة المميزات السابقة (الحفظ المحلي CSV، الواجهة، الفلترة، الصور، إلخ).
-
-**كل ما عليك فعله:**
-
-1. اذهب لملف الكود على GitHub.
-2. امسح كل ما فيه.
-3. انسخ هذا الكود وضعه مكانه (Copy & Paste).
-4. احفظ (Commit).
-
-### كود التطبيق الكامل (المعدل):
-
-```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -19,7 +5,7 @@ import os
 from datetime import datetime
 import time
 import base64
-import requests  # ✅ مكتبة الاتصال الجديدة
+import requests
 
 # --- 1. إعداد الصفحة ---
 ICON_FILE = "diamond_icon.png"
@@ -37,7 +23,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 ATTACHMENTS_DIR = os.path.join(current_dir, "attachments")
 LOCAL_DATA_FILE = os.path.join(current_dir, "finance_data_v28.csv")
 
-# ✅ الرابط الجديد الخاص بك (Backend URL)
+# ✅ الرابط الجديد (تم إضافته)
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzXIdFOFpgLb2qN4-KkkcnCGlG5Z3dZhRPgvnnScSP9S5PQCc7FquwWkhJT9gYIn6SN/exec"
 
 if not os.path.exists(ATTACHMENTS_DIR): os.makedirs(ATTACHMENTS_DIR)
@@ -85,15 +71,12 @@ def save_data_local(df):
 
 def sync_to_google_direct(row_dict):
     """
-    ✅ دالة الإرسال الجديدة باستخدام الرابط المباشر (Web App)
-    لضمان الترتيب الصحيح في الشيت وعدم وجود فراغات
+    ✅ دالة الإرسال الجديدة باستخدام الرابط المباشر
     """
     try:
-        # تحديد نوع العملية للإرسال (expense أو income)
         t_type = str(row_dict.get("النوع", ""))
         trans_type = "income" if "دخل" in t_type else "expense"
         
-        # تجهيز البيانات
         payload = {
             "transType": trans_type,
             "date": str(row_dict.get("التاريخ").date()),
@@ -104,7 +87,6 @@ def sync_to_google_direct(row_dict):
             "note": "تطبيق V3.4"
         }
         
-        # الإرسال
         response = requests.post(APPS_SCRIPT_URL, json=payload)
         
         if response.status_code == 200:
@@ -258,5 +240,3 @@ with tab3:
 
 st.markdown("---")
 st.caption("Masrofy App v1.0 | Developed by Ezzat Emam")
-
-```
