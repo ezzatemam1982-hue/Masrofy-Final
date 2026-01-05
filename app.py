@@ -7,7 +7,9 @@ import time
 import base64
 import requests
 
-# --- 1. إعداد الصفحة ---
+# ---------------------------------------------------------
+# إعداد الصفحة
+# ---------------------------------------------------------
 ICON_FILE = "diamond_icon.png"
 page_icon_obj = ICON_FILE if os.path.exists(ICON_FILE) else "💎"
 
@@ -18,20 +20,19 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. المتغيرات والمسارات ---
+# ---------------------------------------------------------
+# ✅ الرابط الجديد (تم تحديثه بالرابط الذي أرسلته للتو)
+# ---------------------------------------------------------
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbXgGRGb6LyZ2_34JApbNXWqvVmQNKRmxaxTWI-GMPw4Wt_UIaegOH994J8owpI1tg/exec"
+
+# المسارات
 current_dir = os.path.dirname(os.path.abspath(__file__))
 ATTACHMENTS_DIR = os.path.join(current_dir, "attachments")
-LOCAL_DATA_FILE = os.path.join(current_dir, "finance_data_v28.csv")
-
-# ✅ الرابط الجديد (تم إضافته)
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzXIdFOFpgLb2qN4-KkkcnCGlG5Z3dZhRPgvnnScSP9S5PQCc7FquwWkhJT9gYIn6SN/exec"
-
 if not os.path.exists(ATTACHMENTS_DIR): os.makedirs(ATTACHMENTS_DIR)
 
-if 'current_mode' not in st.session_state: st.session_state['current_mode'] = "مصروفات"
-def update_mode(): st.session_state['current_mode'] = st.session_state.mode_selector
-
-# --- 3. CSS ---
+# ---------------------------------------------------------
+# التنسيقات CSS
+# ---------------------------------------------------------
 st.markdown("""
 <style>
     .main {direction: rtl;}
@@ -46,33 +47,35 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. الدوال ---
-def get_base64_image(image_path):
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
-    return None
+# ---------------------------------------------------------
+# دوال الاتصال بجوجل (المحرك الرئيسي)
+# ---------------------------------------------------------
 
-def load_data_local():
-    if os.path.exists(LOCAL_DATA_FILE):
-        try:
-            df = pd.read_csv(LOCAL_DATA_FILE)
-            if "السعر" in df.columns: df.rename(columns={"السعر": "المبلغ"}, inplace=True)
-            if "التاريخ" in df.columns:
-                df["التاريخ"] = pd.to_datetime(df["التاريخ"], errors='coerce')
-                df["المبلغ"] = pd.to_numeric(df["المبلغ"], errors='coerce').fillna(0.0)
-                for col in ["النوع", "البند", "طريقة الدفع", "ملاحظات", "المرفق"]:
-                    if col in df.columns: df[col] = df[col].astype(str).replace('nan', '')
+# 1. دالة سحب البيانات (doGet)
+@st.cache_data(ttl=60) # تحديث كل دقيقة
+def load_data_from_google():
+    try:
+        response = requests.get(APPS_SCRIPT_URL)
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                df = pd.DataFrame(data)
+                # ضبط التنسيقات
+                df["التاريخ"] = pd.to_datetime(df["التاريخ"])
+                df["المبلغ"] = pd.to_numeric(df["المبلغ"])
+                # التأكد من الأعمدة
+                cols = ["النوع", "البند", "طريقة الدفع", "ملاحظات", "المرفق"]
+                for c in cols:
+                    if c not in df.columns: df[c] = ""
                 return df
-        except: pass
+    except Exception as e:
+        print(f"Error: {e}")
+    
+    # لو فشل الاتصال نرجع جدول فاضي عشان التطبيق ميقفش
     return pd.DataFrame(columns=["التاريخ", "السنة", "الشهر", "النوع", "البند", "طريقة الدفع", "المبلغ", "ملاحظات", "المرفق"])
 
-def save_data_local(df):
-    df.to_csv(LOCAL_DATA_FILE, index=False)
-
+# 2. دالة إرسال البيانات (doPost)
 def sync_to_google_direct(row_dict):
-    """
-    ✅ دالة الإرسال الجديدة باستخدام الرابط المباشر
-    """
     try:
         t_type = str(row_dict.get("النوع", ""))
         trans_type = "income" if "دخل" in t_type else "expense"
@@ -84,51 +87,49 @@ def sync_to_google_direct(row_dict):
             "category": str(row_dict.get("البند")),
             "subCategory": str(row_dict.get("ملاحظات", "")),
             "method": str(row_dict.get("طريقة الدفع")),
-            "note": "تطبيق V3.4"
+            "note": "Cloud App v4"
         }
         
         response = requests.post(APPS_SCRIPT_URL, json=payload)
         
         if response.status_code == 200:
             return True, "تم"
-        else:
-            return False, f"رد غير متوقع: {response.text}"
-
+        return False, f"خطأ: {response.text}"
     except Exception as e:
         return False, f"خطأ اتصال: {str(e)}"
 
-# --- 5. القوائم ---
+# ---------------------------------------------------------
+# تشغيل التطبيق
+# ---------------------------------------------------------
+
+# سحب البيانات عند الفتح
+df = load_data_from_google()
+
+# القوائم
 INCOME_CATEGORIES = ["💰 راتب (نص الشهر)", "💰 راتب (اخر الشهر)", "🏠 إيراد إيجار شقة", "🏆 مكافأة أرباح سنوية", "🎁 مكافأة أخرى / إضافية", "💊 استرداد علاج", "💼 استرداد مأموريات عمل", "➕ أخرى"]
 EXPENSE_CATEGORIES = ["🏠 إيجار شقة (سكن)", "🛒 سوبر ماركت وبقالة", "🥩 خضار ولحوم", "⚡ فواتير (كهرباء/غاز/مياه)", "🌐 إنترنت وموبايل", "🚗 بنزين ومواصلات", "🔧 صيانة سيارة", "💊 علاج ودواء", "👕 ملابس", "🎓 مصاريف تعليم ودروس", "🧸 مستلزمات الأبناء", "🎉 ترفيه وخروجات", "➕ أخرى"]
 INSTALLMENT_TYPES = ["🏢 قسط الشقة الربع سنوي", "📦 أقساط مشتريات (أونلاين/أجهزة)", "🏊 قسط النادي", "➕ أخرى"]
 PAYMENT_INCOME = ["💵 كاش", "🏦 تحويل بنكي / راتب", "📱 محفظة إلكترونية"]
 PAYMENT_SPENDING = ["💵 كاش", "💳 Credit Card End 8298", "💳 Credit Card End 6016", "📱 محفظة البنك الأهلي", "📱 محفظة CIB", "📱 فودافون كاش"]
 
-df = load_data_local()
+if 'current_mode' not in st.session_state: st.session_state['current_mode'] = "مصروفات"
+def update_mode(): st.session_state['current_mode'] = st.session_state.mode_selector
 
-# --- 6. الواجهة ---
+def get_base64_image(image_path):
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
+    return None
+
 img_base64_small = get_base64_image(ICON_FILE)
 header_logo = f'<img src="data:image/png;base64,{img_base64_small}" width="90" style="vertical-align: middle;">' if img_base64_small else '<span style="font-size: 60px;">💎</span>'
 
 st.markdown(f"""<div style="display: flex; align-items: center; justify-content: center; direction: rtl; margin-bottom: 20px;">
     <div style="margin-left: 15px;">{header_logo}</div><h1 style="color: #2ecc71; margin: 0; font-size: 2.5rem;">مصروفي | Masrofy</h1></div>""", unsafe_allow_html=True)
 
-if os.path.exists(ICON_FILE): st.sidebar.image(ICON_FILE, width=100)
-else: st.sidebar.title("💎")
-
-with st.sidebar.expander("⚙️ إدارة البيانات", expanded=True):
-    csv_data = df.to_csv(index=False).encode('utf-8')
-    st.download_button("💾 حفظ نسخة احتياطية", csv_data, f"Backup_{datetime.now().date()}.csv", "text/csv")
-    st.markdown("---")
-    upl_file = st.file_uploader("📂 استرجاع ملف بيانات") 
-    if upl_file and st.button("⚠️ تأكيد الاستبدال"):
-        try:
-            udf = pd.read_csv(upl_file)
-            if "السعر" in udf.columns: udf.rename(columns={"السعر": "المبلغ"}, inplace=True)
-            if any(c in udf.columns for c in ["التاريخ", "النوع"]):
-                udf.to_csv(LOCAL_DATA_FILE, index=False)
-                st.success("✅ تم الاسترجاع!"); time.sleep(1); st.rerun()
-        except: st.error("❌ ملف غير صالح")
+# زر التحديث اليدوي
+if st.sidebar.button("🔄 تحديث البيانات (سحب من جوجل)"):
+    st.cache_data.clear()
+    st.rerun()
 
 today = datetime.now()
 years_list = list(range(today.year - 1, today.year + 4))
@@ -165,7 +166,8 @@ with tab1:
         with g2:
             inc = month_df[month_df["النوع"] == "دخل"]
             if not inc.empty: st.plotly_chart(px.bar(inc, x="البند", y="المبلغ", color="البند"), use_container_width=True)
-    else: st.info("السجل فارغ.")
+    else:
+        st.info("جاري الاتصال بقاعدة البيانات السحابية...")
 
 with tab2:
     st.subheader("➕ إضافة معاملة")
@@ -179,10 +181,8 @@ with tab2:
     c1, c2 = st.columns([1,1])
     with c1: cat_sel = st.selectbox("التصنيف:", cat_l)
     cust_cat = ""
-    
     if "أخرى" in cat_sel: 
-        with c2: 
-            cust_cat = st.text_input("اسم المصروف:")
+        with c2: cust_cat = st.text_input("اسم المصروف:")
     
     with st.form("entry", clear_on_submit=True):
         st.markdown("---")
@@ -196,47 +196,32 @@ with tab2:
             pay = st.selectbox("دفع", pay_l)
             dsc = st.text_input("ملاحظة")
         
-        upl = st.file_uploader("صورة الفاتورة (اختياري)", type=["png", "jpg", "jpeg", "pdf"])
+        upl = st.file_uploader("صورة الفاتورة (للعرض فقط)", type=["png", "jpg", "jpeg", "pdf"])
 
-        if st.form_submit_button("💾 حفظ وترحيل", use_container_width=True):
+        if st.form_submit_button("💾 حفظ سحابي", use_container_width=True):
             fin_cat = cust_cat.strip() if ("أخرى" in cat_sel and cust_cat) else cat_sel
-            fp = ""
-            if upl:
-                fp = os.path.join(ATTACHMENTS_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{upl.name}")
-                with open(fp, "wb") as f: f.write(upl.getbuffer())
-
+            
             row_dict = {
                 "التاريخ": pd.to_datetime(dv), "السنة": int(ty), "الشهر": int(tm), 
                 "النوع": t_type, "البند": fin_cat, "طريقة الدفع": pay, 
-                "المبلغ": float(amt), "ملاحظات": dsc, "المرفق": fp
+                "المبلغ": float(amt), "ملاحظات": dsc
             }
             
-            df = pd.concat([df, pd.DataFrame([row_dict])], ignore_index=True)
-            save_data_local(df)
-            
-            with st.spinner("⏳ جاري الإرسال لجوجل شيت..."):
+            with st.spinner("⏳ جاري الإرسال لقاعدة البيانات..."):
                 success, msg = sync_to_google_direct(row_dict)
                 
             if success:
-                st.success(f"✅ تم الحفظ محلياً وعلي جوجل! ({fin_cat})")
+                st.success(f"✅ تم الحفظ بنجاح في جوجل شيت! ({fin_cat})")
                 time.sleep(1)
+                st.cache_data.clear() 
                 st.rerun()
             else:
-                st.warning(f"⚠️ خطأ في جوجل شيت: {msg}")
-                time.sleep(4)
+                st.error(f"❌ حدث خطأ: {msg}")
 
 with tab3:
     if not df.empty:
-        st.dataframe(df.sort_values(by="التاريخ", ascending=False), use_container_width=True, column_config={"المرفق": st.column_config.TextColumn("مسار المرفق")})
-        st.divider()
-        with st.expander("🗑️ حذف"):
-            del_list = df.apply(lambda x: f"{x.name}: {x['التاريخ'].date()} | {x['البند']} | {x['المبلغ']}", axis=1)
-            sel_del = st.selectbox("اختر للحذف:", del_list)
-            if sel_del and st.button("تأكيد الحذف"):
-                df = df.drop(int(sel_del.split(":")[0]))
-                save_data_local(df)
-                st.success("تم الحذف"); time.sleep(0.5); st.rerun()
-    else: st.info("السجل فارغ")
+        st.dataframe(df.sort_values(by="التاريخ", ascending=False), use_container_width=True)
+    else: st.info("لا توجد بيانات متاحة حالياً.")
 
 st.markdown("---")
-st.caption("Masrofy App v1.0 | Developed by Ezzat Emam")
+st.caption("Masrofy App v4.0 (Cloud Edition) | Developed by Ezzat Emam")
