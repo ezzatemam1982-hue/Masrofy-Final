@@ -1,12 +1,25 @@
+ولا يهمك يا صديقي، طلبك أوامر.
+
+لقد قمت بتجميع الكود **كاملاً** (ملف البايثون) بعد إضافة التعديلات المطلوبة لربطه بـ "الرابط الجديد" الذي أرسلته، مع الحفاظ على كافة المميزات السابقة (الحفظ المحلي CSV، الواجهة، الفلترة، الصور، إلخ).
+
+**كل ما عليك فعله:**
+
+1. اذهب لملف الكود على GitHub.
+2. امسح كل ما فيه.
+3. انسخ هذا الكود وضعه مكانه (Copy & Paste).
+4. احفظ (Commit).
+
+### كود التطبيق الكامل (المعدل):
+
+```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
 from datetime import datetime
 import time
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import base64
+import requests  # ✅ مكتبة الاتصال الجديدة
 
 # --- 1. إعداد الصفحة ---
 ICON_FILE = "diamond_icon.png"
@@ -20,13 +33,12 @@ st.set_page_config(
 )
 
 # --- 2. المتغيرات والمسارات ---
-# تثبيت المسار بدقة عشان Streamlit Cloud
 current_dir = os.path.dirname(os.path.abspath(__file__))
-CREDS_FILE = os.path.join(current_dir, "credentials.json")
 ATTACHMENTS_DIR = os.path.join(current_dir, "attachments")
 LOCAL_DATA_FILE = os.path.join(current_dir, "finance_data_v28.csv")
-SHEET_NAME = "Masrofy_DB"
-SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+# ✅ الرابط الجديد الخاص بك (Backend URL)
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzXIdFOFpgLb2qN4-KkkcnCGlG5Z3dZhRPgvnnScSP9S5PQCc7FquwWkhJT9gYIn6SN/exec"
 
 if not os.path.exists(ATTACHMENTS_DIR): os.makedirs(ATTACHMENTS_DIR)
 
@@ -72,24 +84,36 @@ def save_data_local(df):
     df.to_csv(LOCAL_DATA_FILE, index=False)
 
 def sync_to_google_direct(row_dict):
-    """رفع مباشر مع التصحيح الجديد"""
-    if os.path.exists(CREDS_FILE):
-        try:
-            # ✅ التعديل هنا: استخدمنا scopes بدل scope
-            creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scopes=SCOPE)
-            client = gspread.authorize(creds)
-            sheet = client.open(SHEET_NAME).sheet1
-            values = [
-                str(row_dict.get("التاريخ").date()), str(row_dict.get("السنة")), str(row_dict.get("الشهر")), 
-                str(row_dict.get("النوع")), str(row_dict.get("البند")), str(row_dict.get("طريقة الدفع")), 
-                str(row_dict.get("المبلغ")), str(row_dict.get("ملاحظات", "")), "تطبيق V3.4"
-            ]
-            sheet.append_row(values)
+    """
+    ✅ دالة الإرسال الجديدة باستخدام الرابط المباشر (Web App)
+    لضمان الترتيب الصحيح في الشيت وعدم وجود فراغات
+    """
+    try:
+        # تحديد نوع العملية للإرسال (expense أو income)
+        t_type = str(row_dict.get("النوع", ""))
+        trans_type = "income" if "دخل" in t_type else "expense"
+        
+        # تجهيز البيانات
+        payload = {
+            "transType": trans_type,
+            "date": str(row_dict.get("التاريخ").date()),
+            "amount": float(row_dict.get("المبلغ")),
+            "category": str(row_dict.get("البند")),
+            "subCategory": str(row_dict.get("ملاحظات", "")),
+            "method": str(row_dict.get("طريقة الدفع")),
+            "note": "تطبيق V3.4"
+        }
+        
+        # الإرسال
+        response = requests.post(APPS_SCRIPT_URL, json=payload)
+        
+        if response.status_code == 200:
             return True, "تم"
-        except Exception as e:
-            return False, str(e)
-    else:
-        return False, f"ملف المفاتيح غير موجود: {CREDS_FILE}"
+        else:
+            return False, f"رد غير متوقع: {response.text}"
+
+    except Exception as e:
+        return False, f"خطأ اتصال: {str(e)}"
 
 # --- 5. القوائم ---
 INCOME_CATEGORIES = ["💰 راتب (نص الشهر)", "💰 راتب (اخر الشهر)", "🏠 إيراد إيجار شقة", "🏆 مكافأة أرباح سنوية", "🎁 مكافأة أخرى / إضافية", "💊 استرداد علاج", "💼 استرداد مأموريات عمل", "➕ أخرى"]
@@ -235,6 +259,4 @@ with tab3:
 st.markdown("---")
 st.caption("Masrofy App v1.0 | Developed by Ezzat Emam")
 
-
-
-
+```
