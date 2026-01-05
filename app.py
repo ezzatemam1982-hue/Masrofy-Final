@@ -8,220 +8,200 @@ import base64
 import requests
 
 # ---------------------------------------------------------
-# إعداد الصفحة
+# إعدادات الصفحة
 # ---------------------------------------------------------
 ICON_FILE = "diamond_icon.png"
 page_icon_obj = ICON_FILE if os.path.exists(ICON_FILE) else "💎"
 
-st.set_page_config(
-    page_title="مصروفي | Masrofy",
-    page_icon=page_icon_obj,
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+st.set_page_config(page_title="مصروفي | Masrofy", page_icon=page_icon_obj, layout="wide", initial_sidebar_state="collapsed")
 
 # ---------------------------------------------------------
-# ✅ الرابط الجديد (تم تحديثه بالرابط الذي أرسلته للتو)
+# الرابط (تأكد من تحديث Apps Script وعمل New Version)
 # ---------------------------------------------------------
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbXgGRGb6LyZ2_34JApbNXWqvVmQNKRmxaxTWI-GMPw4Wt_UIaegOH994J8owpI1tg/exec"
 
-# المسارات
-current_dir = os.path.dirname(os.path.abspath(__file__))
-ATTACHMENTS_DIR = os.path.join(current_dir, "attachments")
-if not os.path.exists(ATTACHMENTS_DIR): os.makedirs(ATTACHMENTS_DIR)
-
 # ---------------------------------------------------------
-# التنسيقات CSS
+# دوال الاتصال (Brain)
 # ---------------------------------------------------------
-st.markdown("""
-<style>
-    .main {direction: rtl;}
-    h1, h2, h3, h4, p, div, label, .stSelectbox, .stNumberInput, .stDateInput, .stTextInput, .stRadio, .stMarkdown, .stTabs {
-        text-align: right !important;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; justify-content: center; }
-    .stTabs [data-baseweb="tab"] { height: 50px; background-color: #f0f2f6; border-radius: 10px; color: #000; font-weight: bold; flex: 1; }
-    .stTabs [aria-selected="true"] { background-color: #2ecc71 !important; color: white !important; }
-    .stDownloadButton button { width: 100%; background-color: #f1c40f !important; color: black !important; border: none; font-weight: bold; }
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------------------------------------------------
-# دوال الاتصال بجوجل (المحرك الرئيسي)
-# ---------------------------------------------------------
-
-# 1. دالة سحب البيانات (doGet)
-@st.cache_data(ttl=60) # تحديث كل دقيقة
-def load_data_from_google():
+@st.cache_data(ttl=5) # تقليل وقت الكاش عشان التعديل يظهر بسرعة
+def load_data():
     try:
         response = requests.get(APPS_SCRIPT_URL)
         if response.status_code == 200:
             data = response.json()
             if data:
                 df = pd.DataFrame(data)
-                # ضبط التنسيقات
                 df["التاريخ"] = pd.to_datetime(df["التاريخ"])
                 df["المبلغ"] = pd.to_numeric(df["المبلغ"])
-                # التأكد من الأعمدة
-                cols = ["النوع", "البند", "طريقة الدفع", "ملاحظات", "المرفق"]
-                for c in cols:
-                    if c not in df.columns: df[c] = ""
                 return df
-    except Exception as e:
-        print(f"Error: {e}")
-    
-    # لو فشل الاتصال نرجع جدول فاضي عشان التطبيق ميقفش
-    return pd.DataFrame(columns=["التاريخ", "السنة", "الشهر", "النوع", "البند", "طريقة الدفع", "المبلغ", "ملاحظات", "المرفق"])
+    except: pass
+    return pd.DataFrame(columns=["id", "التاريخ", "السنة", "الشهر", "النوع", "البند", "طريقة الدفع", "المبلغ", "ملاحظات"])
 
-# 2. دالة إرسال البيانات (doPost)
-def sync_to_google_direct(row_dict):
+def send_to_google(payload):
     try:
-        t_type = str(row_dict.get("النوع", ""))
-        trans_type = "income" if "دخل" in t_type else "expense"
-        
-        payload = {
-            "transType": trans_type,
-            "date": str(row_dict.get("التاريخ").date()),
-            "amount": float(row_dict.get("المبلغ")),
-            "category": str(row_dict.get("البند")),
-            "subCategory": str(row_dict.get("ملاحظات", "")),
-            "method": str(row_dict.get("طريقة الدفع")),
-            "note": "Cloud App v4"
-        }
-        
         response = requests.post(APPS_SCRIPT_URL, json=payload)
-        
-        if response.status_code == 200:
-            return True, "تم"
-        return False, f"خطأ: {response.text}"
+        return response.status_code == 200, response.text
     except Exception as e:
-        return False, f"خطأ اتصال: {str(e)}"
+        return False, str(e)
 
 # ---------------------------------------------------------
-# تشغيل التطبيق
+# الواجهة
 # ---------------------------------------------------------
+# CSS
+st.markdown("""
+<style>
+    .main {direction: rtl;}
+    h1, h2, h3, h4, p, div, label, .stSelectbox, .stNumberInput, .stDateInput, .stTextInput, .stRadio, .stMarkdown, .stTabs, .stDataFrame {
+        text-align: right !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; justify-content: center; }
+    .stTabs [data-baseweb="tab"] { height: 50px; background-color: #f0f2f6; border-radius: 10px; color: #000; font-weight: bold; flex: 1; }
+    .stTabs [aria-selected="true"] { background-color: #2ecc71 !important; color: white !important; }
+    div[data-testid="stMetric"] { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; border: 1px solid #eee; }
+</style>
+""", unsafe_allow_html=True)
 
-# سحب البيانات عند الفتح
-df = load_data_from_google()
+# التحميل
+if 'refresh_trigger' not in st.session_state: st.session_state.refresh_trigger = 0
+df = load_data()
 
 # القوائم
 INCOME_CATEGORIES = ["💰 راتب (نص الشهر)", "💰 راتب (اخر الشهر)", "🏠 إيراد إيجار شقة", "🏆 مكافأة أرباح سنوية", "🎁 مكافأة أخرى / إضافية", "💊 استرداد علاج", "💼 استرداد مأموريات عمل", "➕ أخرى"]
 EXPENSE_CATEGORIES = ["🏠 إيجار شقة (سكن)", "🛒 سوبر ماركت وبقالة", "🥩 خضار ولحوم", "⚡ فواتير (كهرباء/غاز/مياه)", "🌐 إنترنت وموبايل", "🚗 بنزين ومواصلات", "🔧 صيانة سيارة", "💊 علاج ودواء", "👕 ملابس", "🎓 مصاريف تعليم ودروس", "🧸 مستلزمات الأبناء", "🎉 ترفيه وخروجات", "➕ أخرى"]
-INSTALLMENT_TYPES = ["🏢 قسط الشقة الربع سنوي", "📦 أقساط مشتريات (أونلاين/أجهزة)", "🏊 قسط النادي", "➕ أخرى"]
-PAYMENT_INCOME = ["💵 كاش", "🏦 تحويل بنكي / راتب", "📱 محفظة إلكترونية"]
-PAYMENT_SPENDING = ["💵 كاش", "💳 Credit Card End 8298", "💳 Credit Card End 6016", "📱 محفظة البنك الأهلي", "📱 محفظة CIB", "📱 فودافون كاش"]
+PAYMENT_METHODS = ["💵 كاش", "💳 فيزا", "📱 محفظة", "🏦 بنك"]
 
-if 'current_mode' not in st.session_state: st.session_state['current_mode'] = "مصروفات"
-def update_mode(): st.session_state['current_mode'] = st.session_state.mode_selector
+# الهيدر
+st.markdown(f"""<h1 style="text-align: center; color: #2ecc71;">مصروفي | Masrofy Cloud ☁️</h1>""", unsafe_allow_html=True)
+if st.button("🔄 تحديث البيانات"): st.cache_data.clear(); st.rerun()
 
-def get_base64_image(image_path):
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
-    return None
+# التبويبات
+tab1, tab2, tab3, tab4 = st.tabs(["📊 لوحة القيادة", "📝 تسجيل جديد", "✏️ تعديل / حذف", "📂 السجل"])
 
-img_base64_small = get_base64_image(ICON_FILE)
-header_logo = f'<img src="data:image/png;base64,{img_base64_small}" width="90" style="vertical-align: middle;">' if img_base64_small else '<span style="font-size: 60px;">💎</span>'
-
-st.markdown(f"""<div style="display: flex; align-items: center; justify-content: center; direction: rtl; margin-bottom: 20px;">
-    <div style="margin-left: 15px;">{header_logo}</div><h1 style="color: #2ecc71; margin: 0; font-size: 2.5rem;">مصروفي | Masrofy</h1></div>""", unsafe_allow_html=True)
-
-# زر التحديث اليدوي
-if st.sidebar.button("🔄 تحديث البيانات (سحب من جوجل)"):
-    st.cache_data.clear()
-    st.rerun()
-
-today = datetime.now()
-years_list = list(range(today.year - 1, today.year + 4))
-default_year_ix = years_list.index(today.year) if today.year in years_list else 1
-
-with st.expander("📅 إعدادات الفلترة", expanded=False):
-    c1, c2, c3 = st.columns(3)
-    with c1: view_year = st.selectbox("السنة", years_list, index=default_year_ix)
-    with c2: view_month = st.selectbox("الشهر", range(1, 13), index=today.month - 1)
-    with c3: food_budget_limit = st.number_input("ميزانية الطعام", value=5000, step=100)
-
-tab1, tab2, tab3 = st.tabs(["📊 لوحة القيادة", "📝 تسجيل جديد", "📂 السجل"])
-
+# --- 1. لوحة القيادة ---
 with tab1:
-    if not df.empty and "التاريخ" in df.columns:
-        mask = (df["الشهر"] == int(view_month)) & (df["السنة"] == int(view_year))
-        month_df = df[mask]
-        total_inc = month_df[month_df["النوع"] == "دخل"]["المبلغ"].sum()
-        total_exp = month_df[month_df["النوع"].str.contains("مصروف", na=False)]["المبلغ"].sum()
-        total_inst = month_df[month_df["النوع"] == "قسط"]["المبلغ"].sum()
-        bal = total_inc - (total_exp + total_inst)
-        
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("💰 الدخل", f"{total_inc:,.0f}")
-        c2.metric("💸 المصاريف", f"{total_exp:,.0f}")
-        c3.metric("📅 الأقساط", f"{total_inst:,.0f}")
-        c4.metric("✅ الرصيد", f"{bal:,.0f}", delta_color="normal" if bal >= 0 else "inverse")
-        
-        st.divider()
-        g1, g2 = st.columns(2)
-        with g1:
-            out = month_df[month_df["النوع"].str.contains("مصروف|قسط", regex=True, na=False)]
-            if not out.empty: st.plotly_chart(px.pie(out, values='المبلغ', names='البند', hole=0.4), use_container_width=True)
-        with g2:
-            inc = month_df[month_df["النوع"] == "دخل"]
-            if not inc.empty: st.plotly_chart(px.bar(inc, x="البند", y="المبلغ", color="البند"), use_container_width=True)
-    else:
-        st.info("جاري الاتصال بقاعدة البيانات السحابية...")
-
-with tab2:
-    st.subheader("➕ إضافة معاملة")
-    options = ["مصروفات", "دخل", "قسط"]
-    t_type = st.radio("النوع:", options, horizontal=True, index=options.index(st.session_state['current_mode']), key="mode_selector", on_change=update_mode)
-    
-    if t_type == "دخل": cat_l, pay_l = INCOME_CATEGORIES, PAYMENT_INCOME
-    elif t_type == "قسط": cat_l, pay_l = INSTALLMENT_TYPES, PAYMENT_SPENDING
-    else: cat_l, pay_l = EXPENSE_CATEGORIES, PAYMENT_SPENDING
-    
-    c1, c2 = st.columns([1,1])
-    with c1: cat_sel = st.selectbox("التصنيف:", cat_l)
-    cust_cat = ""
-    if "أخرى" in cat_sel: 
-        with c2: cust_cat = st.text_input("اسم المصروف:")
-    
-    with st.form("entry", clear_on_submit=True):
-        st.markdown("---")
-        c1, c2 = st.columns(2)
-        with c1:
-            tm = st.selectbox("شهر", range(1, 13), index=today.month - 1)
-            ty = st.selectbox("سنة", years_list, index=default_year_ix)
-            dv = st.date_input("يوم", datetime.today())
-        with c2:
-            amt = st.number_input("المبلغ", min_value=0.0, step=50.0)
-            pay = st.selectbox("دفع", pay_l)
-            dsc = st.text_input("ملاحظة")
-        
-        upl = st.file_uploader("صورة الفاتورة (للعرض فقط)", type=["png", "jpg", "jpeg", "pdf"])
-
-        if st.form_submit_button("💾 حفظ سحابي", use_container_width=True):
-            fin_cat = cust_cat.strip() if ("أخرى" in cat_sel and cust_cat) else cat_sel
-            
-            row_dict = {
-                "التاريخ": pd.to_datetime(dv), "السنة": int(ty), "الشهر": int(tm), 
-                "النوع": t_type, "البند": fin_cat, "طريقة الدفع": pay, 
-                "المبلغ": float(amt), "ملاحظات": dsc
-            }
-            
-            with st.spinner("⏳ جاري الإرسال لقاعدة البيانات..."):
-                success, msg = sync_to_google_direct(row_dict)
-                
-            if success:
-                st.success(f"✅ تم الحفظ بنجاح في جوجل شيت! ({fin_cat})")
-                time.sleep(1)
-                st.cache_data.clear() 
-                st.rerun()
-            else:
-                st.error(f"❌ حدث خطأ: {msg}")
-
-with tab3:
     if not df.empty:
-        st.dataframe(df.sort_values(by="التاريخ", ascending=False), use_container_width=True)
-    else: st.info("لا توجد بيانات متاحة حالياً.")
+        today = datetime.now()
+        c1, c2 = st.columns(2)
+        with c1: view_year = st.selectbox("السنة", sorted(df["السنة"].unique()), index=len(df["السنة"].unique())-1)
+        with c2: view_month = st.selectbox("الشهر", range(1, 13), index=today.month - 1)
+        
+        mask = (df["الشهر"] == view_month) & (df["السنة"] == view_year)
+        m_df = df[mask]
+        
+        inc = m_df[m_df["النوع"]=="دخل"]["المبلغ"].sum()
+        exp = m_df[m_df["النوع"]=="مصروفات"]["المبلغ"].sum()
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("الدخل", f"{inc:,.0f}")
+        col2.metric("المصروفات", f"{exp:,.0f}")
+        col3.metric("المتبقي", f"{inc-exp:,.0f}")
+        
+        if not m_df.empty:
+            exp_data = m_df[m_df["النوع"]=="مصروفات"]
+            if not exp_data.empty:
+                st.plotly_chart(px.pie(exp_data, values='المبلغ', names='البند', hole=0.4), use_container_width=True)
+    else:
+        st.info("لا توجد بيانات. ابدأ بإضافة عمليات.")
+
+# --- 2. تسجيل جديد ---
+with tab2:
+    st.subheader("إضافة عملية جديدة")
+    c1, c2 = st.columns(2)
+    with c1: t_type = st.radio("النوع", ["مصروفات", "دخل"], horizontal=True)
+    with c2: 
+        cats = INCOME_CATEGORIES if t_type == "دخل" else EXPENSE_CATEGORIES
+        cat = st.selectbox("البند", cats)
+    
+    col_a, col_b = st.columns(2)
+    with col_a: date_val = st.date_input("التاريخ", datetime.now())
+    with col_b: amount_val = st.number_input("المبلغ", min_value=1.0, step=10.0)
+    
+    col_c, col_d = st.columns(2)
+    with col_c: method_val = st.selectbox("طريقة الدفع", PAYMENT_METHODS)
+    with col_d: note_val = st.text_input("ملاحظات / تفاصيل")
+    
+    if st.button("💾 حفظ العملية", use_container_width=True):
+        payload = {
+            "action": "add",
+            "transType": "income" if t_type == "دخل" else "expense",
+            "date": str(date_val),
+            "amount": amount_val,
+            "category": cat,
+            "subCategory": note_val,
+            "method": method_val
+        }
+        with st.spinner("جاري الحفظ في جوجل شيت..."):
+            ok, msg = send_to_google(payload)
+            if ok:
+                st.success("تم الحفظ!"); time.sleep(1); st.cache_data.clear(); st.rerun()
+            else:
+                st.error("خطأ: " + msg)
+
+# --- 3. تعديل / حذف (الجديد) ---
+with tab3:
+    st.subheader("إدارة العمليات (تعديل أو حذف)")
+    if not df.empty:
+        # اختيار العملية
+        # بنعمل قايمة شكلها حلو عشان تختار منها
+        df['label'] = df.apply(lambda x: f"{x['التاريخ'].date()} | {x['النوع']} | {x['البند']} | {x['المبلغ']}", axis=1)
+        selected_label = st.selectbox("اختر العملية للتعديل أو الحذف:", df['label'].tolist())
+        
+        # استخراج بيانات العملية المختارة
+        if selected_label:
+            row = df[df['label'] == selected_label].iloc[0]
+            st.info(f"العملية المحددة: {selected_label}")
+            
+            # فورم التعديل
+            with st.expander("✏️ تعديل البيانات", expanded=True):
+                new_amount = st.number_input("تعديل المبلغ", value=float(row['المبلغ']))
+                cats_edit = INCOME_CATEGORIES if row['النوع'] == "دخل" else EXPENSE_CATEGORIES
+                
+                # محاولة تحديد الفهرس الصحيح، لو مش موجود نختار الأول
+                try: cat_index = cats_edit.index(row['البند'])
+                except: cat_index = 0
+                    
+                new_cat = st.selectbox("تعديل البند", cats_edit, index=cat_index)
+                new_note = st.text_input("تعديل الملاحظات", value=row['ملاحظات'])
+                
+                c_edit, c_del = st.columns(2)
+                
+                # زر التعديل
+                if c_edit.button("تحديث البيانات"):
+                    payload = {
+                        "action": "edit",
+                        "id": row['id'], # ده الرقم السري بتاع الصف
+                        "transType": "income" if row['النوع'] == "دخل" else "expense", # للحفاظ على التوافق
+                        "date": str(row['التاريخ'].date()), # التاريخ يظل كما هو
+                        "amount": new_amount,
+                        "category": new_cat,
+                        "subCategory": new_note,
+                        "method": row['طريقة الدفع']
+                    }
+                    with st.spinner("جاري التعديل..."):
+                        ok, msg = send_to_google(payload)
+                        if ok: st.success("تم التعديل!"); time.sleep(1); st.cache_data.clear(); st.rerun()
+                        else: st.error("فشل التعديل")
+
+                # زر الحذف
+                if c_del.button("🗑️ حذف نهائي", type="primary"):
+                    payload = {
+                        "action": "delete",
+                        "id": row['id']
+                    }
+                    with st.spinner("جاري الحذف..."):
+                        ok, msg = send_to_google(payload)
+                        if ok: st.success("تم الحذف!"); time.sleep(1); st.cache_data.clear(); st.rerun()
+                        else: st.error("فشل الحذف")
+    else:
+        st.warning("لا توجد عمليات لتعديلها.")
+
+# --- 4. السجل ---
+with tab4:
+    if not df.empty:
+        st.dataframe(df.drop(columns=['id', 'label'], errors='ignore').sort_values(by="التاريخ", ascending=False), use_container_width=True)
+    else:
+        st.info("السجل فارغ.")
 
 st.markdown("---")
-st.caption("Masrofy App v4.0 (Cloud Edition) | Developed by Ezzat Emam")
+st.caption("Masrofy v5.0 | Full Cloud Control")
