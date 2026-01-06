@@ -80,16 +80,15 @@ st.markdown(f"""<h1 style="text-align: center; color: #2ecc71;">مصروفي | M
 if st.button("🔄 تحديث البيانات"): st.cache_data.clear(); st.rerun()
 
 # --- إعدادات الفلترة وميزانية الطعام ---
-with st.expander("📅 إعدادات وميزانية", expanded=False):
+today = datetime.now()
+# قائمة السنوات المتاحة (الحالية + القادمة + اللي في الداتا)
+years_available = sorted(list(set([today.year, today.year + 1] + (df["السنة"].tolist() if not df.empty else []))))
+
+with st.expander("📅 إعدادات العرض وميزانية الطعام", expanded=False):
     c1, c2, c3 = st.columns(3)
-    today = datetime.now()
-    if not df.empty:
-        years = sorted(df["السنة"].unique()) if "السنة" in df.columns else [today.year]
-    else: years = [today.year]
-    
-    with c1: view_year = st.selectbox("السنة", years, index=len(years)-1)
-    with c2: view_month = st.selectbox("الشهر", range(1, 13), index=today.month - 1)
-    with c3: food_budget_limit = st.number_input("🍖 ميزانية الطعام الشهرية", value=5000, step=100)
+    with c1: view_year = st.selectbox("عرض سنة", years_available, index=years_available.index(today.year) if today.year in years_available else 0)
+    with c2: view_month = st.selectbox("عرض شهر", range(1, 13), index=today.month - 1)
+    with c3: food_budget_limit = st.number_input("🍖 ميزانية الطعام", value=5000, step=100)
 
 # التبويبات
 tab1, tab2, tab3, tab4 = st.tabs(["📊 لوحة القيادة", "📝 تسجيل جديد", "✏️ تعديل / حذف", "📂 السجل"])
@@ -142,18 +141,16 @@ with tab1:
         st.info("لا توجد بيانات. ابدأ بإضافة عمليات.")
 
 # =========================================================
-# TAB 2: تسجيل جديد (تم تحسين التجربة)
+# TAB 2: تسجيل جديد (مع تحديد شهر الميزانية)
 # =========================================================
 with tab2:
     st.subheader("إضافة عملية جديدة")
     
-    # 1. تهيئة المتغيرات (Session State) لتفريغ الحقول بعد الحفظ
+    # Session State للتهيئة
     if 'add_amount' not in st.session_state: st.session_state.add_amount = 0.0
     if 'add_note' not in st.session_state: st.session_state.add_note = ""
     if 'add_date' not in st.session_state: st.session_state.add_date = datetime.now()
 
-    # 2. اختيار النوع
-    # استخدمنا key مختلف للراديو عشان ميعملش تعارض
     t_type = st.radio("النوع", ["مصروفات", "دخل", "قسط"], horizontal=True, key="radio_entry_type")
     
     if t_type == "دخل": current_cats = INCOME_CATEGORIES
@@ -163,17 +160,21 @@ with tab2:
     cat = st.selectbox("البند / التصنيف", current_cats)
     if "أخرى" in cat: cat = st.text_input("اكتب اسم البند هنا:")
 
-    # 3. الفورم (بدون clear_on_submit عشان نتحكم في التاريخ)
     with st.form("entry_form"):
-        col_a, col_b = st.columns(2)
+        # صف التاريخ والميزانية
+        c_date, c_month, c_year = st.columns(3)
+        date_val = c_date.date_input("تاريخ العملية", key="add_date")
         
-        # ربطنا الحقول بالـ session_state عشان نقدر نتحكم فيها ونصفرها
-        date_val = col_a.date_input("التاريخ", key="add_date") 
-        amount_val = col_b.number_input("المبلغ", min_value=0.0, step=10.0, key="add_amount")
+        # ✅ هنا الجديد: تحديد شهر وسنة الميزانية يدوياً
+        # بنخلي الافتراضي هو شهر وتاريخ العملية اللي اخترناها (أو اليوم)
+        selected_month = c_month.selectbox("شهر الميزانية", range(1, 13), index=date_val.month - 1)
+        selected_year = c_year.selectbox("سنة الميزانية", years_available, index=years_available.index(date_val.year) if date_val.year in years_available else 0)
+
+        col_amt, col_pay = st.columns(2)
+        amount_val = col_amt.number_input("المبلغ", min_value=0.0, step=10.0, key="add_amount")
+        method_val = col_pay.selectbox("طريقة الدفع", PAYMENT_METHODS)
         
-        col_c, col_d = st.columns(2)
-        method_val = col_c.selectbox("طريقة الدفع", PAYMENT_METHODS)
-        note_val = col_d.text_input("ملاحظات / تفاصيل", key="add_note")
+        note_val = st.text_input("ملاحظات / تفاصيل", key="add_note")
         
         submitted = st.form_submit_button("💾 حفظ وترحيل سحابي", use_container_width=True)
 
@@ -184,6 +185,8 @@ with tab2:
                     "action": "add",
                     "transType": backend_type, 
                     "date": str(date_val),
+                    "customMonth": selected_month, # ✅ إرسال الشهر المختار
+                    "customYear": selected_year,   # ✅ إرسال السنة المختارة
                     "amount": amount_val,
                     "category": cat,
                     "subCategory": note_val,
@@ -194,21 +197,20 @@ with tab2:
                 with st.spinner("جاري الحفظ..."):
                     ok, msg = send_to_google(payload)
                     if ok:
-                        st.success("تم الحفظ بنجاح!")
-                        # 🔥 هنا السحر: تصفير الحقول وإعادة التاريخ لليوم
+                        st.success(f"تم الحفظ في ميزانية شهر {selected_month}/{selected_year}!")
                         st.session_state.add_amount = 0.0
                         st.session_state.add_note = ""
                         st.session_state.add_date = datetime.now()
                         time.sleep(1)
                         st.cache_data.clear()
-                        st.rerun() # إعادة تحميل عشان الحقول تظهر فاضية
+                        st.rerun()
                     else:
                         st.error("خطأ: " + msg)
             else:
                 st.warning("يرجى إدخال مبلغ أكبر من صفر.")
 
 # =========================================================
-# TAB 3: تعديل / حذف
+# TAB 3: تعديل / حذف (مع إمكانية تعديل شهر الميزانية)
 # =========================================================
 with tab3:
     st.subheader("إدارة العمليات")
@@ -221,33 +223,44 @@ with tab3:
         else: display_df = df[df["النوع"].str.contains("مصروف", na=False)]
         
         if not display_df.empty:
-            display_df['label'] = display_df.apply(lambda x: f"{x['التاريخ'].date()} | {x['النوع']} | {x['البند']} | {x['المبلغ']}", axis=1)
+            display_df['label'] = display_df.apply(lambda x: f"{x['التاريخ'].date()} | {x['النوع']} | {x['البند']} | {x['المبلغ']} (شهر {x['الشهر']})", axis=1)
             selected_label = st.selectbox("اختر العملية:", display_df['label'].tolist())
             
             if selected_label:
                 row = display_df[display_df['label'] == selected_label].iloc[0]
                 
                 with st.expander("✏️ تعديل البيانات", expanded=True):
-                    new_amount = st.number_input("تعديل المبلغ", value=float(row['المبلغ']))
+                    # تعديل المبلغ والبند
+                    c_edit1, c_edit2 = st.columns(2)
+                    new_amount = c_edit1.number_input("تعديل المبلغ", value=float(row['المبلغ']))
                     
                     if "قسط" in row['النوع']: edit_cats = INSTALLMENT_TYPES
                     elif "دخل" in row['النوع']: edit_cats = INCOME_CATEGORIES
                     else: edit_cats = EXPENSE_CATEGORIES
-                    
                     try: c_ix = edit_cats.index(row['البند'])
                     except: c_ix = 0
+                    new_cat = c_edit2.selectbox("تعديل البند", edit_cats, index=c_ix)
+
+                    # ✅ تعديل شهر وسنة الميزانية
+                    c_edit3, c_edit4 = st.columns(2)
+                    new_month = c_edit3.selectbox("تعديل شهر الميزانية", range(1, 13), index=int(row['الشهر'])-1)
                     
-                    new_cat = st.selectbox("تعديل البند", edit_cats, index=c_ix)
+                    curr_y = int(row['السنة'])
+                    y_idx = years_available.index(curr_y) if curr_y in years_available else 0
+                    new_year = c_edit4.selectbox("تعديل سنة الميزانية", years_available, index=y_idx)
+
                     new_note = st.text_input("تعديل الملاحظات", value=row['ملاحظات'])
                     
-                    c_edit, c_del = st.columns(2)
+                    c_btn1, c_btn2 = st.columns(2)
                     
-                    if c_edit.button("تحديث"):
+                    if c_btn1.button("تحديث"):
                         payload = {
                             "action": "edit",
                             "id": row['id'],
                             "transType": row['النوع'],
                             "date": str(row['التاريخ'].date()),
+                            "customMonth": new_month, # ✅ إرسال التعديل
+                            "customYear": new_year,   # ✅ إرسال التعديل
                             "amount": new_amount,
                             "category": new_cat,
                             "subCategory": new_note,
@@ -255,10 +268,10 @@ with tab3:
                         }
                         with st.spinner("جاري التعديل..."):
                             ok, msg = send_to_google(payload)
-                            if ok: st.success("تم!"); time.sleep(1); st.cache_data.clear(); st.rerun()
+                            if ok: st.success("تم التحديث!"); time.sleep(1); st.cache_data.clear(); st.rerun()
                             else: st.error("فشل التعديل")
 
-                    if c_del.button("🗑️ حذف", type="primary"):
+                    if c_btn2.button("🗑️ حذف", type="primary"):
                         payload = {"action": "delete", "id": row['id']}
                         with st.spinner("جاري الحذف..."):
                             ok, msg = send_to_google(payload)
@@ -277,4 +290,4 @@ with tab4:
         st.info("السجل فارغ.")
 
 st.markdown("---")
-st.caption("Masrofy v1.1 | Ultimate UX Edition 🚀")
+st.caption("Masrofy v1.1 | Budget Control Edition 🚀")
