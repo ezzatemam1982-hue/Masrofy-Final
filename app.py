@@ -13,15 +13,15 @@ import requests
 ICON_FILE = "diamond_icon.png"
 page_icon_obj = ICON_FILE if os.path.exists(ICON_FILE) else "💎"
 
-st.set_page_config(page_title="مصروفي | Masrofy Cloud", page_icon=page_icon_obj, layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="مصروفي | Masrofy Business", page_icon=page_icon_obj, layout="wide", initial_sidebar_state="collapsed")
 
 # ---------------------------------------------------------
-# 2. الرابط السحري (Google Apps Script URL)
+# 2. الرابط السحري
 # ---------------------------------------------------------
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbXgGRGb6LyZ2_34JApbNXWqvVmQNKRmxaxTWI-GMPw4Wt_UIaegOH994J8owpI1tg/exec"
 
 # ---------------------------------------------------------
-# 3. CSS (التصميم)
+# 3. CSS
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -38,7 +38,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 4. دوال الاتصال (المخ)
+# 4. دوال الاتصال
 # ---------------------------------------------------------
 @st.cache_data(ttl=5) 
 def load_data():
@@ -64,7 +64,7 @@ def send_to_google(payload):
         return False, str(e)
 
 # ---------------------------------------------------------
-# 5. القوائم والبيانات
+# 5. القوائم
 # ---------------------------------------------------------
 df = load_data()
 
@@ -74,14 +74,13 @@ INSTALLMENT_TYPES = ["🏢 قسط الشقة الربع سنوي", "📦 أقس�
 PAYMENT_METHODS = ["💵 كاش", "💳 فيزا", "📱 محفظة", "🏦 بنك"]
 
 # ---------------------------------------------------------
-# 6. الواجهة الرسومية
+# 6. الواجهة
 # ---------------------------------------------------------
-st.markdown(f"""<h1 style="text-align: center; color: #2ecc71;">مصروفي | Masrofy Cloud ☁️</h1>""", unsafe_allow_html=True)
+st.markdown(f"""<h1 style="text-align: center; color: #2ecc71;">مصروفي | Masrofy Business 💼</h1>""", unsafe_allow_html=True)
 if st.button("🔄 تحديث البيانات"): st.cache_data.clear(); st.rerun()
 
-# --- إعدادات الفلترة وميزانية الطعام ---
+# --- إعدادات ---
 today = datetime.now()
-# قائمة السنوات المتاحة (الحالية + القادمة + اللي في الداتا)
 years_available = sorted(list(set([today.year, today.year + 1] + (df["السنة"].tolist() if not df.empty else []))))
 
 with st.expander("📅 إعدادات العرض وميزانية الطعام", expanded=False):
@@ -90,8 +89,7 @@ with st.expander("📅 إعدادات العرض وميزانية الطعام",
     with c2: view_month = st.selectbox("عرض شهر", range(1, 13), index=today.month - 1)
     with c3: food_budget_limit = st.number_input("🍖 ميزانية الطعام", value=5000, step=100)
 
-# التبويبات
-tab1, tab2, tab3, tab4 = st.tabs(["📊 لوحة القيادة", "📝 تسجيل جديد", "✏️ تعديل / حذف", "📂 السجل"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 لوحة القيادة", "📝 تسجيل جديد", "✏️ إدارة / تحصيل", "📂 السجل"])
 
 # =========================================================
 # TAB 1: لوحة القيادة
@@ -101,59 +99,54 @@ with tab1:
         mask = (df["الشهر"] == view_month) & (df["السنة"] == view_year)
         m_df = df[mask]
         
+        # الحسابات
         inc = m_df[m_df["النوع"]=="دخل"]["المبلغ"].sum()
+        # الدخل المنتظر (بنحسبه من الداتا الكلية عشان نعرف لينا كام بره عموماً مش بس الشهر ده)
+        # أو ممكن نحسبه للشهر ده بس؟ الأفضل عموماً.
+        # خلينا نحسب "المنتظر" للشهر المحدد عشان الميزانية، وممكن رقم كلي.
+        pending_total = df[df["النوع"]=="دخل منتظر"]["المبلغ"].sum()
+        
         exp_only = m_df[m_df["النوع"].str.contains("مصروف", na=False)]["المبلغ"].sum()
         inst_only = m_df[m_df["النوع"].str.contains("قسط", na=False)]["المبلغ"].sum()
-        total_out = exp_only + inst_only
-        balance = inc - total_out
+        balance = inc - (exp_only + inst_only)
         
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("💰 إجمالي الدخل", f"{inc:,.0f}")
-        col2.metric("💸 المصروفات", f"{exp_only:,.0f}")
-        col3.metric("📅 الأقساط", f"{inst_only:,.0f}")
-        col4.metric("✅ الرصيد المتبقي", f"{balance:,.0f}", delta_color="normal" if balance >= 0 else "inverse")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("💰 الدخل المحصل", f"{inc:,.0f}")
+        c2.metric("💸 المصروفات", f"{exp_only:,.0f}")
+        c3.metric("📅 الأقساط", f"{inst_only:,.0f}")
+        c4.metric("⏳ دخل منتظر (كلي)", f"{pending_total:,.0f}", delta="فلوس ليك بره")
         
-        st.divider()
-        
-        food_spent = m_df[m_df["البند"].str.contains("طعام|سوبر ماركت|خضار|لحوم|بقال", na=False)]["المبلغ"].sum()
-        food_progress = min(food_spent / food_budget_limit, 1.0) if food_budget_limit > 0 else 0
-        st.write(f"**🍖 استهلاك الطعام:** {food_spent:,.0f} من {food_budget_limit:,.0f}")
-        st.progress(food_progress)
-        if food_spent > food_budget_limit: st.error("⚠️ لقد تجاوزت ميزانية الطعام!")
+        st.metric("✅ الرصيد الحالي (المتاح)", f"{balance:,.0f}", delta_color="normal" if balance >= 0 else "inverse")
         
         st.divider()
-
         g1, g2 = st.columns(2)
         with g1:
             out_data = m_df[m_df["النوع"].str.contains("مصروف|قسط", na=False)]
             if not out_data.empty:
-                st.subheader("توزيع المصاريف والأقساط")
-                fig_pie = px.pie(out_data, values='المبلغ', names='البند', hole=0.4)
-                st.plotly_chart(fig_pie, use_container_width=True)
-            
+                st.subheader("توزيع المصاريف")
+                st.plotly_chart(px.pie(out_data, values='المبلغ', names='البند', hole=0.4), use_container_width=True)
         with g2:
             inc_data = m_df[m_df["النوع"] == "دخل"]
             if not inc_data.empty:
                 st.subheader("مصادر الدخل")
-                fig_bar = px.bar(inc_data, x="البند", y="المبلغ", color="البند")
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.plotly_chart(px.bar(inc_data, x="البند", y="المبلغ", color="البند"), use_container_width=True)
     else:
-        st.info("لا توجد بيانات. ابدأ بإضافة عمليات.")
+        st.info("لا توجد بيانات.")
 
 # =========================================================
-# TAB 2: تسجيل جديد (مع تحديد شهر الميزانية)
+# TAB 2: تسجيل جديد (تم إضافة دخل منتظر)
 # =========================================================
 with tab2:
     st.subheader("إضافة عملية جديدة")
     
-    # Session State للتهيئة
     if 'add_amount' not in st.session_state: st.session_state.add_amount = 0.0
     if 'add_note' not in st.session_state: st.session_state.add_note = ""
     if 'add_date' not in st.session_state: st.session_state.add_date = datetime.now()
 
-    t_type = st.radio("النوع", ["مصروفات", "دخل", "قسط"], horizontal=True, key="radio_entry_type")
+    # ✅ إضافة النوع الجديد
+    t_type = st.radio("النوع", ["مصروفات", "دخل", "قسط", "دخل منتظر ⏳"], horizontal=True, key="radio_entry_type")
     
-    if t_type == "دخل": current_cats = INCOME_CATEGORIES
+    if "دخل" in t_type: current_cats = INCOME_CATEGORIES
     elif t_type == "قسط": current_cats = INSTALLMENT_TYPES
     else: current_cats = EXPENSE_CATEGORIES
     
@@ -161,94 +154,120 @@ with tab2:
     if "أخرى" in cat: cat = st.text_input("اكتب اسم البند هنا:")
 
     with st.form("entry_form"):
-        # صف التاريخ والميزانية
         c_date, c_month, c_year = st.columns(3)
         date_val = c_date.date_input("تاريخ العملية", key="add_date")
         
-        # ✅ هنا الجديد: تحديد شهر وسنة الميزانية يدوياً
-        # بنخلي الافتراضي هو شهر وتاريخ العملية اللي اخترناها (أو اليوم)
         selected_month = c_month.selectbox("شهر الميزانية", range(1, 13), index=date_val.month - 1)
         selected_year = c_year.selectbox("سنة الميزانية", years_available, index=years_available.index(date_val.year) if date_val.year in years_available else 0)
 
         col_amt, col_pay = st.columns(2)
         amount_val = col_amt.number_input("المبلغ", min_value=0.0, step=10.0, key="add_amount")
-        method_val = col_pay.selectbox("طريقة الدفع", PAYMENT_METHODS)
+        
+        # لو دخل منتظر، بنخفي طريقة الدفع (أو نخليها أوتوماتيك)
+        if "منتظر" in t_type:
+            st.info("سيتم تسجيل الحالة: 'منتظر' تلقائياً")
+            method_val = "منتظر"
+        else:
+            method_val = col_pay.selectbox("طريقة الدفع", PAYMENT_METHODS)
         
         note_val = st.text_input("ملاحظات / تفاصيل", key="add_note")
         
-        submitted = st.form_submit_button("💾 حفظ وترحيل سحابي", use_container_width=True)
+        submitted = st.form_submit_button("💾 حفظ وترحيل", use_container_width=True)
 
         if submitted:
             if amount_val > 0:
-                backend_type = "income" if t_type == "دخل" else "expense"
+                backend_type = "income" if "دخل" in t_type else "expense"
+                
+                # لو منتظر، هنأكد إن الميثود "منتظر" عشان الشيت يفهم
+                final_method = "منتظر" if "منتظر" in t_type else method_val
+                
                 payload = {
                     "action": "add",
                     "transType": backend_type, 
                     "date": str(date_val),
-                    "customMonth": selected_month, # ✅ إرسال الشهر المختار
-                    "customYear": selected_year,   # ✅ إرسال السنة المختارة
+                    "customMonth": selected_month,
+                    "customYear": selected_year,
                     "amount": amount_val,
                     "category": cat,
                     "subCategory": note_val,
-                    "method": method_val,
+                    "method": final_method,
                     "realType": t_type 
                 }
                 
                 with st.spinner("جاري الحفظ..."):
                     ok, msg = send_to_google(payload)
                     if ok:
-                        st.success(f"تم الحفظ في ميزانية شهر {selected_month}/{selected_year}!")
+                        st.success(f"تم الحفظ!")
                         st.session_state.add_amount = 0.0
                         st.session_state.add_note = ""
                         st.session_state.add_date = datetime.now()
                         time.sleep(1)
-                        st.cache_data.clear()
-                        st.rerun()
+                        st.cache_data.clear(); st.rerun()
                     else:
                         st.error("خطأ: " + msg)
-            else:
-                st.warning("يرجى إدخال مبلغ أكبر من صفر.")
 
 # =========================================================
-# TAB 3: تعديل / حذف (مع إمكانية تعديل شهر الميزانية)
+# TAB 3: إدارة / تحصيل (Business Tab)
 # =========================================================
 with tab3:
-    st.subheader("إدارة العمليات")
+    st.subheader("💼 إدارة العمليات والتحصيل")
+    
     if not df.empty:
-        filter_type = st.radio("فلتر بـ:", ["الكل", "مصروفات", "دخل", "قسط"], horizontal=True, key="filter_radio")
-        
-        if filter_type == "الكل": display_df = df
-        elif filter_type == "قسط": display_df = df[df["النوع"].str.contains("قسط", na=False)]
-        elif filter_type == "دخل": display_df = df[df["النوع"] == "دخل"]
-        else: display_df = df[df["النوع"].str.contains("مصروف", na=False)]
-        
-        if not display_df.empty:
-            display_df['label'] = display_df.apply(lambda x: f"{x['التاريخ'].date()} | {x['النوع']} | {x['البند']} | {x['المبلغ']} (شهر {x['الشهر']})", axis=1)
-            selected_label = st.selectbox("اختر العملية:", display_df['label'].tolist())
+        # --- قسم التحصيل السريع ---
+        pending_df = df[df["النوع"] == "دخل منتظر"]
+        if not pending_df.empty:
+            st.warning(f"🔔 لديك {len(pending_df)} عمليات دخل منتظر بإجمالي {pending_df['المبلغ'].sum():,.0f}")
             
-            if selected_label:
-                row = display_df[display_df['label'] == selected_label].iloc[0]
+            # عرض العمليات المنتظرة
+            for index, row in pending_df.iterrows():
+                with st.container():
+                    c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 2])
+                    c1.write(f"📅 {row['التاريخ'].date()}")
+                    c2.write(f"🏷️ {row['البند']}")
+                    c3.write(f"💰 {row['المبلغ']:,.0f}")
+                    c4.write(f"📝 {row['ملاحظات']}")
+                    
+                    # زر التحصيل
+                    if c5.button("✅ استلمت المبلغ", key=f"collect_{row['id']}"):
+                        # تحويل الحالة
+                        payload = {
+                            "action": "edit",
+                            "id": row['id'],
+                            "transType": "income", # يفضل دخل
+                            "date": str(datetime.now().date()), # تحديث التاريخ لليوم
+                            "customMonth": datetime.now().month, # تحديث للشهر الحالي
+                            "customYear": datetime.now().year,
+                            "amount": row['المبلغ'],
+                            "category": row['البند'],
+                            "subCategory": row['ملاحظات'] + " (تم التحصيل)",
+                            "method": "كاش" # الافتراضي كاش
+                        }
+                        with st.spinner("جاري التحصيل..."):
+                            ok, msg = send_to_google(payload)
+                            if ok: st.success("تم التحصيل وإضافة المبلغ للدخل!"); time.sleep(1); st.cache_data.clear(); st.rerun()
+                            else: st.error("حدث خطأ")
+                st.divider()
+        else:
+            st.success("✨ لا يوجد دخل منتظر حالياً.")
+
+        st.markdown("---")
+        
+        # --- قسم التعديل والحذف التقليدي ---
+        with st.expander("🛠️ تعديل أو حذف عمليات أخرى"):
+            filter_type = st.radio("نوع العملية:", ["مصروفات", "دخل", "قسط"], horizontal=True)
+            
+            if filter_type == "قسط": display_df = df[df["النوع"].str.contains("قسط", na=False)]
+            elif filter_type == "دخل": display_df = df[df["النوع"] == "دخل"]
+            else: display_df = df[df["النوع"].str.contains("مصروف", na=False)]
+            
+            if not display_df.empty:
+                display_df['label'] = display_df.apply(lambda x: f"{x['التاريخ'].date()} | {x['البند']} | {x['المبلغ']}", axis=1)
+                selected_label = st.selectbox("اختر العملية:", display_df['label'].tolist())
                 
-                with st.expander("✏️ تعديل البيانات", expanded=True):
-                    # تعديل المبلغ والبند
-                    c_edit1, c_edit2 = st.columns(2)
-                    new_amount = c_edit1.number_input("تعديل المبلغ", value=float(row['المبلغ']))
+                if selected_label:
+                    row = display_df[display_df['label'] == selected_label].iloc[0]
                     
-                    if "قسط" in row['النوع']: edit_cats = INSTALLMENT_TYPES
-                    elif "دخل" in row['النوع']: edit_cats = INCOME_CATEGORIES
-                    else: edit_cats = EXPENSE_CATEGORIES
-                    try: c_ix = edit_cats.index(row['البند'])
-                    except: c_ix = 0
-                    new_cat = c_edit2.selectbox("تعديل البند", edit_cats, index=c_ix)
-
-                    # ✅ تعديل شهر وسنة الميزانية
-                    c_edit3, c_edit4 = st.columns(2)
-                    new_month = c_edit3.selectbox("تعديل شهر الميزانية", range(1, 13), index=int(row['الشهر'])-1)
-                    
-                    curr_y = int(row['السنة'])
-                    y_idx = years_available.index(curr_y) if curr_y in years_available else 0
-                    new_year = c_edit4.selectbox("تعديل سنة الميزانية", years_available, index=y_idx)
-
+                    new_amount = st.number_input("تعديل المبلغ", value=float(row['المبلغ']))
                     new_note = st.text_input("تعديل الملاحظات", value=row['ملاحظات'])
                     
                     c_btn1, c_btn2 = st.columns(2)
@@ -259,26 +278,20 @@ with tab3:
                             "id": row['id'],
                             "transType": row['النوع'],
                             "date": str(row['التاريخ'].date()),
-                            "customMonth": new_month, # ✅ إرسال التعديل
-                            "customYear": new_year,   # ✅ إرسال التعديل
+                            "customMonth": row['الشهر'], 
+                            "customYear": row['السنة'],
                             "amount": new_amount,
-                            "category": new_cat,
+                            "category": row['البند'],
                             "subCategory": new_note,
                             "method": row['طريقة الدفع']
                         }
-                        with st.spinner("جاري التعديل..."):
-                            ok, msg = send_to_google(payload)
-                            if ok: st.success("تم التحديث!"); time.sleep(1); st.cache_data.clear(); st.rerun()
-                            else: st.error("فشل التعديل")
+                        send_to_google(payload)
+                        st.success("تم!"); st.cache_data.clear(); st.rerun()
 
                     if c_btn2.button("🗑️ حذف", type="primary"):
                         payload = {"action": "delete", "id": row['id']}
-                        with st.spinner("جاري الحذف..."):
-                            ok, msg = send_to_google(payload)
-                            if ok: st.success("تم الحذف!"); time.sleep(1); st.cache_data.clear(); st.rerun()
-                            else: st.error("فشل الحذف")
-        else: st.info("لا توجد عمليات بهذا النوع.")
-    else: st.info("لا توجد بيانات.")
+                        send_to_google(payload)
+                        st.success("تم الحذف!"); st.cache_data.clear(); st.rerun()
 
 # =========================================================
 # TAB 4: السجل
@@ -290,4 +303,4 @@ with tab4:
         st.info("السجل فارغ.")
 
 st.markdown("---")
-st.caption("Masrofy v1.1 | Budget Control Edition 🚀")
+st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
