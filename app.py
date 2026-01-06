@@ -99,11 +99,7 @@ with tab1:
         mask = (df["الشهر"] == view_month) & (df["السنة"] == view_year)
         m_df = df[mask]
         
-        # الحسابات
         inc = m_df[m_df["النوع"]=="دخل"]["المبلغ"].sum()
-        # الدخل المنتظر (بنحسبه من الداتا الكلية عشان نعرف لينا كام بره عموماً مش بس الشهر ده)
-        # أو ممكن نحسبه للشهر ده بس؟ الأفضل عموماً.
-        # خلينا نحسب "المنتظر" للشهر المحدد عشان الميزانية، وممكن رقم كلي.
         pending_total = df[df["النوع"]=="دخل منتظر"]["المبلغ"].sum()
         
         exp_only = m_df[m_df["النوع"].str.contains("مصروف", na=False)]["المبلغ"].sum()
@@ -134,16 +130,24 @@ with tab1:
         st.info("لا توجد بيانات.")
 
 # =========================================================
-# TAB 2: تسجيل جديد (تم إضافة دخل منتظر)
+# TAB 2: تسجيل جديد (تم الإصلاح هنا) 🛠️
 # =========================================================
 with tab2:
     st.subheader("إضافة عملية جديدة")
     
+    # 1. التحقق من نجاح العملية السابقة وتصفير الحقول (قبل رسم الخانات)
+    if st.session_state.get('form_success_flag', False):
+        st.session_state.add_amount = 0.0
+        st.session_state.add_note = ""
+        st.session_state.add_date = datetime.now()
+        st.session_state.form_success_flag = False  # إطفاء العلامة
+        # تم التصفير بنجاح لأننا لسه مسمناش الخانات تحت
+
+    # تهيئة المتغيرات لأول مرة
     if 'add_amount' not in st.session_state: st.session_state.add_amount = 0.0
     if 'add_note' not in st.session_state: st.session_state.add_note = ""
     if 'add_date' not in st.session_state: st.session_state.add_date = datetime.now()
 
-    # ✅ إضافة النوع الجديد
     t_type = st.radio("النوع", ["مصروفات", "دخل", "قسط", "دخل منتظر ⏳"], horizontal=True, key="radio_entry_type")
     
     if "دخل" in t_type: current_cats = INCOME_CATEGORIES
@@ -163,7 +167,6 @@ with tab2:
         col_amt, col_pay = st.columns(2)
         amount_val = col_amt.number_input("المبلغ", min_value=0.0, step=10.0, key="add_amount")
         
-        # لو دخل منتظر، بنخفي طريقة الدفع (أو نخليها أوتوماتيك)
         if "منتظر" in t_type:
             st.info("سيتم تسجيل الحالة: 'منتظر' تلقائياً")
             method_val = "منتظر"
@@ -177,8 +180,6 @@ with tab2:
         if submitted:
             if amount_val > 0:
                 backend_type = "income" if "دخل" in t_type else "expense"
-                
-                # لو منتظر، هنأكد إن الميثود "منتظر" عشان الشيت يفهم
                 final_method = "منتظر" if "منتظر" in t_type else method_val
                 
                 payload = {
@@ -198,27 +199,26 @@ with tab2:
                     ok, msg = send_to_google(payload)
                     if ok:
                         st.success(f"تم الحفظ!")
-                        st.session_state.add_amount = 0.0
-                        st.session_state.add_note = ""
-                        st.session_state.add_date = datetime.now()
+                        # 🔥 التعديل هنا: بدل ما نصفر مباشرة، نرفع العلم ونعمل ريستارت
+                        st.session_state.form_success_flag = True 
                         time.sleep(1)
-                        st.cache_data.clear(); st.rerun()
+                        st.cache_data.clear()
+                        st.rerun() # هذا سيعيد تشغيل الكود من السطر 1 ويصفر القيم هناك
                     else:
                         st.error("خطأ: " + msg)
+            else:
+                st.warning("المبلغ يجب أن يكون أكبر من صفر")
 
 # =========================================================
-# TAB 3: إدارة / تحصيل (Business Tab)
+# TAB 3: إدارة / تحصيل
 # =========================================================
 with tab3:
     st.subheader("💼 إدارة العمليات والتحصيل")
     
     if not df.empty:
-        # --- قسم التحصيل السريع ---
         pending_df = df[df["النوع"] == "دخل منتظر"]
         if not pending_df.empty:
             st.warning(f"🔔 لديك {len(pending_df)} عمليات دخل منتظر بإجمالي {pending_df['المبلغ'].sum():,.0f}")
-            
-            # عرض العمليات المنتظرة
             for index, row in pending_df.iterrows():
                 with st.container():
                     c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 2])
@@ -226,25 +226,22 @@ with tab3:
                     c2.write(f"🏷️ {row['البند']}")
                     c3.write(f"💰 {row['المبلغ']:,.0f}")
                     c4.write(f"📝 {row['ملاحظات']}")
-                    
-                    # زر التحصيل
                     if c5.button("✅ استلمت المبلغ", key=f"collect_{row['id']}"):
-                        # تحويل الحالة
                         payload = {
                             "action": "edit",
                             "id": row['id'],
-                            "transType": "income", # يفضل دخل
-                            "date": str(datetime.now().date()), # تحديث التاريخ لليوم
-                            "customMonth": datetime.now().month, # تحديث للشهر الحالي
+                            "transType": "income",
+                            "date": str(datetime.now().date()),
+                            "customMonth": datetime.now().month,
                             "customYear": datetime.now().year,
                             "amount": row['المبلغ'],
                             "category": row['البند'],
                             "subCategory": row['ملاحظات'] + " (تم التحصيل)",
-                            "method": "كاش" # الافتراضي كاش
+                            "method": "كاش"
                         }
                         with st.spinner("جاري التحصيل..."):
                             ok, msg = send_to_google(payload)
-                            if ok: st.success("تم التحصيل وإضافة المبلغ للدخل!"); time.sleep(1); st.cache_data.clear(); st.rerun()
+                            if ok: st.success("تم!"); time.sleep(1); st.cache_data.clear(); st.rerun()
                             else: st.error("حدث خطأ")
                 st.divider()
         else:
@@ -252,10 +249,8 @@ with tab3:
 
         st.markdown("---")
         
-        # --- قسم التعديل والحذف التقليدي ---
         with st.expander("🛠️ تعديل أو حذف عمليات أخرى"):
             filter_type = st.radio("نوع العملية:", ["مصروفات", "دخل", "قسط"], horizontal=True)
-            
             if filter_type == "قسط": display_df = df[df["النوع"].str.contains("قسط", na=False)]
             elif filter_type == "دخل": display_df = df[df["النوع"] == "دخل"]
             else: display_df = df[df["النوع"].str.contains("مصروف", na=False)]
@@ -263,15 +258,11 @@ with tab3:
             if not display_df.empty:
                 display_df['label'] = display_df.apply(lambda x: f"{x['التاريخ'].date()} | {x['البند']} | {x['المبلغ']}", axis=1)
                 selected_label = st.selectbox("اختر العملية:", display_df['label'].tolist())
-                
                 if selected_label:
                     row = display_df[display_df['label'] == selected_label].iloc[0]
-                    
                     new_amount = st.number_input("تعديل المبلغ", value=float(row['المبلغ']))
                     new_note = st.text_input("تعديل الملاحظات", value=row['ملاحظات'])
-                    
                     c_btn1, c_btn2 = st.columns(2)
-                    
                     if c_btn1.button("تحديث"):
                         payload = {
                             "action": "edit",
@@ -287,7 +278,6 @@ with tab3:
                         }
                         send_to_google(payload)
                         st.success("تم!"); st.cache_data.clear(); st.rerun()
-
                     if c_btn2.button("🗑️ حذف", type="primary"):
                         payload = {"action": "delete", "id": row['id']}
                         send_to_google(payload)
@@ -302,5 +292,7 @@ with tab4:
     else:
         st.info("السجل فارغ.")
 
+
 st.markdown("---")
 st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
+
