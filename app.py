@@ -21,7 +21,7 @@ st.set_page_config(page_title="مصروفي | Masrofy Business", page_icon=page_
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbXgGRGb6LyZ2_34JApbNXWqvVmQNKRmxaxTWI-GMPw4Wt_UIaegOH994J8owpI1tg/exec"
 
 # ---------------------------------------------------------
-# 3. CSS (تحسينات للتصميم الجديد)
+# 3. CSS
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -30,17 +30,21 @@ st.markdown("""
         text-align: right !important;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    /* تنسيق القائمة الجانبية */
-    section[data-testid="stSidebar"] {
-        direction: rtl;
-        text-align: right;
-    }
+    section[data-testid="stSidebar"] { direction: rtl; text-align: right; }
     div[data-testid="stMetric"] { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; border: 1px solid #eee; }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 4. دوال الاتصال
+# 4. القوائم
+# ---------------------------------------------------------
+INCOME_CATEGORIES = ["💰 راتب (نص الشهر)", "💰 راتب (اخر الشهر)", "🏠 إيراد إيجار شقة", "🏆 مكافأة أرباح سنوية", "🎁 مكافأة أخرى / إضافية", "💊 استرداد علاج", "💼 استرداد مأموريات عمل", "➕ أخرى"]
+EXPENSE_CATEGORIES = ["🏠 إيجار شقة (سكن)", "🛒 سوبر ماركت وبقالة", "🥩 خضار ولحوم", "⚡ فواتير (كهرباء/غاز/مياه)", "🌐 إنترنت وموبايل", "🚗 بنزين ومواصلات", "🔧 صيانة سيارة", "💊 علاج ودواء", "👕 ملابس", "🎓 مصاريف تعليم ودروس", "🧸 مستلزمات الأبناء", "🎉 ترفيه وخروجات", "➕ أخرى"]
+INSTALLMENT_TYPES = ["🏢 قسط الشقة الربع سنوي", "📦 أقساط مشتريات (أونلاين/أجهزة)", "🏊 قسط النادي", "➕ أخرى"]
+PAYMENT_METHODS = ["💵 كاش", "💳 فيزا", "📱 محفظة", "🏦 بنك"]
+
+# ---------------------------------------------------------
+# 5. دوال الاتصال ومعالجة البيانات
 # ---------------------------------------------------------
 @st.cache_data(ttl=5) 
 def load_data():
@@ -54,6 +58,25 @@ def load_data():
                 df["المبلغ"] = pd.to_numeric(df["المبلغ"])
                 for col in ["النوع", "البند", "طريقة الدفع", "ملاحظات"]:
                     if col not in df.columns: df[col] = ""
+                
+                # 🔥 التصنيف الذكي (v12) 🔥
+                def classify_type(row):
+                    val_type = str(row['النوع'])
+                    val_cat = str(row['البند'])
+                    
+                    # 1. لو دخل، يفضل دخل
+                    if "دخل" in val_type: return val_type
+                    
+                    # 2. لو البند موجود في قائمة الأقساط، أو اسمه فيه كلمة "قسط"
+                    if val_cat in INSTALLMENT_TYPES or "قسط" in val_cat or "أقساط" in val_cat:
+                        return "قسط"
+                    
+                    # 3. غير كده يبقى مصروفات
+                    return "مصروفات"
+
+                if not df.empty:
+                    df['النوع'] = df.apply(classify_type, axis=1)
+
                 return df
     except: pass
     return pd.DataFrame(columns=["id", "التاريخ", "السنة", "الشهر", "النوع", "البند", "طريقة الدفع", "المبلغ", "ملاحظات"])
@@ -66,28 +89,16 @@ def send_to_google(payload):
         return False, str(e)
 
 # ---------------------------------------------------------
-# 5. تهيئة البيانات والقوائم
+# 6. القائمة الجانبية
 # ---------------------------------------------------------
 df = load_data()
 
-INCOME_CATEGORIES = ["💰 راتب (نص الشهر)", "💰 راتب (اخر الشهر)", "🏠 إيراد إيجار شقة", "🏆 مكافأة أرباح سنوية", "🎁 مكافأة أخرى / إضافية", "💊 استرداد علاج", "💼 استرداد مأموريات عمل", "➕ أخرى"]
-EXPENSE_CATEGORIES = ["🏠 إيجار شقة (سكن)", "🛒 سوبر ماركت وبقالة", "🥩 خضار ولحوم", "⚡ فواتير (كهرباء/غاز/مياه)", "🌐 إنترنت وموبايل", "🚗 بنزين ومواصلات", "🔧 صيانة سيارة", "💊 علاج ودواء", "👕 ملابس", "🎓 مصاريف تعليم ودروس", "🧸 مستلزمات الأبناء", "🎉 ترفيه وخروجات", "➕ أخرى"]
-INSTALLMENT_TYPES = ["🏢 قسط الشقة الربع سنوي", "📦 أقساط مشتريات (أونلاين/أجهزة)", "🏊 قسط النادي", "➕ أخرى"]
-PAYMENT_METHODS = ["💵 كاش", "💳 فيزا", "📱 محفظة", "🏦 بنك"]
-
-# ---------------------------------------------------------
-# 6. القائمة الجانبية (Navigation & Filters) - تم التصحيح ✅
-# ---------------------------------------------------------
 with st.sidebar:
-    # التصحيح هنا: استخدام if عادية بدلاً من السطر المختصر
-    if os.path.exists(ICON_FILE):
-        st.image(ICON_FILE, width=80)
-    else:
-        st.title("💎")
+    if os.path.exists(ICON_FILE): st.image(ICON_FILE, width=80)
+    else: st.title("💎")
         
     st.title("القائمة الرئيسية")
     
-    # قائمة التنقل الثابتة
     selected_page = st.radio(
         "اختر الصفحة:", 
         ["📊 لوحة القيادة", "📝 تسجيل جديد", "💼 إدارة / تحصيل", "📂 السجل"],
@@ -112,39 +123,46 @@ with st.sidebar:
 # ---------------------------------------------------------
 # 7. محتوى الصفحات
 # ---------------------------------------------------------
-
 st.title(f"مصروفي | {selected_page.replace('📊 ', '').replace('📝 ', '').replace('💼 ', '').replace('📂 ', '')}")
 
-# =========================================================
 # PAGE 1: لوحة القيادة
-# =========================================================
 if selected_page == "📊 لوحة القيادة":
     if not df.empty:
         mask = (df["الشهر"] == view_month) & (df["السنة"] == view_year)
         m_df = df[mask]
         
-        inc = m_df[m_df["النوع"]=="دخل"]["المبلغ"].sum()
+        # 1. الحسابات
+        inc = m_df[m_df["النوع"].str.contains("دخل") & (~m_df["النوع"].str.contains("منتظر"))]["المبلغ"].sum()
         pending_total = df[df["النوع"]=="دخل منتظر"]["المبلغ"].sum()
         
-        exp_only = m_df[m_df["النوع"].str.contains("مصروف", na=False)]["المبلغ"].sum()
-        inst_only = m_df[m_df["النوع"].str.contains("قسط", na=False)]["المبلغ"].sum()
+        exp_only = m_df[m_df["النوع"]=="مصروفات"]["المبلغ"].sum()
+        inst_only = m_df[m_df["النوع"]=="قسط"]["المبلغ"].sum()
+        
+        # ✅ المعادلة التي طلبتها: الدخل - (مصروفات + أقساط)
         balance = inc - (exp_only + inst_only)
         
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("💰 الدخل المحصل", f"{inc:,.0f}")
         c2.metric("💸 المصروفات", f"{exp_only:,.0f}")
         c3.metric("📅 الأقساط", f"{inst_only:,.0f}")
-        c4.metric("⏳ دخل منتظر (كلي)", f"{pending_total:,.0f}", delta="فلوس ليك بره")
+        c4.metric("⏳ دخل منتظر", f"{pending_total:,.0f}", delta="خارج الحسابات")
         
-        st.metric("✅ الرصيد الحالي (المتاح)", f"{balance:,.0f}", delta_color="normal" if balance >= 0 else "inverse")
+        st.metric("✅ المتبقي من الدخل (الرصيد)", f"{balance:,.0f}", delta_color="normal" if balance >= 0 else "inverse")
         
         st.divider()
         g1, g2 = st.columns(2)
         with g1:
-            out_data = m_df[m_df["النوع"].str.contains("مصروف|قسط", na=False)]
+            # ✅ الرسمة التي طلبتها: (مصروفات + أقساط)
+            out_data = m_df[m_df["النوع"].isin(["مصروفات", "قسط"])]
             if not out_data.empty:
-                st.subheader("توزيع المصاريف")
-                st.plotly_chart(px.pie(out_data, values='المبلغ', names='البند', hole=0.4), use_container_width=True)
+                st.subheader("أين يذهب الدخل؟ (مصاريف وأقساط)")
+                # رسمة الدونات المجوفة عشان تكون أوضح
+                fig = px.pie(out_data, values='المبلغ', names='البند', hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("لا توجد مصاريف أو أقساط لعرضها.")
+                
         with g2:
             inc_data = m_df[m_df["النوع"] == "دخل"]
             if not inc_data.empty:
@@ -153,9 +171,7 @@ if selected_page == "📊 لوحة القيادة":
     else:
         st.info("لا توجد بيانات.")
 
-# =========================================================
 # PAGE 2: تسجيل جديد
-# =========================================================
 elif selected_page == "📝 تسجيل جديد":
     st.subheader("إضافة عملية جديدة")
     
@@ -229,9 +245,7 @@ elif selected_page == "📝 تسجيل جديد":
             else:
                 st.warning("المبلغ يجب أن يكون أكبر من صفر")
 
-# =========================================================
 # PAGE 3: إدارة / تحصيل
-# =========================================================
 elif selected_page == "💼 إدارة / تحصيل":
     st.subheader("💼 إدارة العمليات والتحصيل")
     
@@ -271,9 +285,13 @@ elif selected_page == "💼 إدارة / تحصيل":
         
         with st.expander("🛠️ تعديل أو حذف عمليات أخرى"):
             filter_type = st.radio("نوع العملية:", ["مصروفات", "دخل", "قسط"], horizontal=True)
-            if filter_type == "قسط": display_df = df[df["النوع"].str.contains("قسط", na=False)]
-            elif filter_type == "دخل": display_df = df[df["النوع"] == "دخل"]
-            else: display_df = df[df["النوع"].str.contains("مصروف", na=False)]
+            
+            if filter_type == "قسط": 
+                display_df = df[df["النوع"] == "قسط"] 
+            elif filter_type == "دخل": 
+                display_df = df[df["النوع"] == "دخل"]
+            else: 
+                display_df = df[df["النوع"] == "مصروفات"]
             
             if not display_df.empty:
                 display_df['label'] = display_df.apply(lambda x: f"{x['التاريخ'].date()} | {x['البند']} | {x['المبلغ']}", axis=1)
@@ -323,9 +341,7 @@ elif selected_page == "💼 إدارة / تحصيل":
                             else:
                                 st.error(f"خطأ: {msg}")
 
-# =========================================================
 # PAGE 4: السجل
-# =========================================================
 elif selected_page == "📂 السجل":
     if not df.empty:
         st.dataframe(df.drop(columns=['id', 'label'], errors='ignore').sort_values(by="التاريخ", ascending=False), use_container_width=True)
@@ -333,8 +349,10 @@ elif selected_page == "📂 السجل":
         st.info("السجل فارغ.")
 
 
+
 st.markdown("---")
 st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
+
 
 
 
