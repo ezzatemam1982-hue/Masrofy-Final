@@ -13,7 +13,7 @@ import requests
 ICON_FILE = "diamond_icon.png"
 page_icon_obj = ICON_FILE if os.path.exists(ICON_FILE) else "💎"
 
-st.set_page_config(page_title="مصروفي | Masrofy Business", page_icon=page_icon_obj, layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="مصروفي | Masrofy Business", page_icon=page_icon_obj, layout="wide", initial_sidebar_state="expanded")
 
 # ---------------------------------------------------------
 # 2. الرابط السحري
@@ -21,18 +21,20 @@ st.set_page_config(page_title="مصروفي | Masrofy Business", page_icon=page_
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbXgGRGb6LyZ2_34JApbNXWqvVmQNKRmxaxTWI-GMPw4Wt_UIaegOH994J8owpI1tg/exec"
 
 # ---------------------------------------------------------
-# 3. CSS
+# 3. CSS (تحسينات للتصميم الجديد)
 # ---------------------------------------------------------
 st.markdown("""
 <style>
     .main {direction: rtl;}
-    h1, h2, h3, h4, p, div, label, .stSelectbox, .stNumberInput, .stDateInput, .stTextInput, .stRadio, .stMarkdown, .stTabs, .stDataFrame {
+    h1, h2, h3, h4, p, div, label, .stSelectbox, .stNumberInput, .stDateInput, .stTextInput, .stRadio, .stMarkdown, .stDataFrame {
         text-align: right !important;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; justify-content: center; }
-    .stTabs [data-baseweb="tab"] { height: 50px; background-color: #f0f2f6; border-radius: 10px; color: #000; font-weight: bold; flex: 1; }
-    .stTabs [aria-selected="true"] { background-color: #2ecc71 !important; color: white !important; }
+    /* تنسيق القائمة الجانبية */
+    section[data-testid="stSidebar"] {
+        direction: rtl;
+        text-align: right;
+    }
     div[data-testid="stMetric"] { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; border: 1px solid #eee; }
 </style>
 """, unsafe_allow_html=True)
@@ -64,7 +66,7 @@ def send_to_google(payload):
         return False, str(e)
 
 # ---------------------------------------------------------
-# 5. القوائم
+# 5. تهيئة البيانات والقوائم
 # ---------------------------------------------------------
 df = load_data()
 
@@ -74,27 +76,45 @@ INSTALLMENT_TYPES = ["🏢 قسط الشقة الربع سنوي", "📦 أقس�
 PAYMENT_METHODS = ["💵 كاش", "💳 فيزا", "📱 محفظة", "🏦 بنك"]
 
 # ---------------------------------------------------------
-# 6. الواجهة
+# 6. القائمة الجانبية (Navigation & Filters) - هنا الحل الجذري
 # ---------------------------------------------------------
-st.markdown(f"""<h1 style="text-align: center; color: #2ecc71;">مصروفي | Masrofy Business 💼</h1>""", unsafe_allow_html=True)
-if st.button("🔄 تحديث البيانات"): st.cache_data.clear(); st.rerun()
+with st.sidebar:
+    st.image(ICON_FILE, width=80) if os.path.exists(ICON_FILE) else st.title("💎")
+    st.title("القائمة الرئيسية")
+    
+    # قائمة التنقل الثابتة
+    selected_page = st.radio(
+        "اختر الصفحة:", 
+        ["📊 لوحة القيادة", "📝 تسجيل جديد", "💼 إدارة / تحصيل", "📂 السجل"],
+        key="nav_radio"
+    )
+    
+    st.markdown("---")
+    st.subheader("📅 إعدادات الفلترة")
+    
+    # إعدادات الفلترة نقلناها هنا عشان تكون ثابتة
+    today = datetime.now()
+    years_available = sorted(list(set([today.year, today.year + 1] + (df["السنة"].tolist() if not df.empty else []))))
+    
+    view_year = st.selectbox("السنة", years_available, index=years_available.index(today.year) if today.year in years_available else 0)
+    view_month = st.selectbox("الشهر", range(1, 13), index=today.month - 1)
+    food_budget_limit = st.number_input("🍖 ميزانية الطعام", value=5000, step=100)
+    
+    st.markdown("---")
+    if st.button("🔄 تحديث البيانات", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
-# --- إعدادات ---
-today = datetime.now()
-years_available = sorted(list(set([today.year, today.year + 1] + (df["السنة"].tolist() if not df.empty else []))))
+# ---------------------------------------------------------
+# 7. محتوى الصفحات
+# ---------------------------------------------------------
 
-with st.expander("📅 إعدادات العرض وميزانية الطعام", expanded=False):
-    c1, c2, c3 = st.columns(3)
-    with c1: view_year = st.selectbox("عرض سنة", years_available, index=years_available.index(today.year) if today.year in years_available else 0)
-    with c2: view_month = st.selectbox("عرض شهر", range(1, 13), index=today.month - 1)
-    with c3: food_budget_limit = st.number_input("🍖 ميزانية الطعام", value=5000, step=100)
-
-tab1, tab2, tab3, tab4 = st.tabs(["📊 لوحة القيادة", "📝 تسجيل جديد", "✏️ إدارة / تحصيل", "📂 السجل"])
+st.title(f"مصروفي | {selected_page.replace('📊 ', '').replace('📝 ', '').replace('💼 ', '').replace('📂 ', '')}")
 
 # =========================================================
-# TAB 1: لوحة القيادة
+# PAGE 1: لوحة القيادة
 # =========================================================
-with tab1:
+if selected_page == "📊 لوحة القيادة":
     if not df.empty:
         mask = (df["الشهر"] == view_month) & (df["السنة"] == view_year)
         m_df = df[mask]
@@ -130,9 +150,9 @@ with tab1:
         st.info("لا توجد بيانات.")
 
 # =========================================================
-# TAB 2: تسجيل جديد
+# PAGE 2: تسجيل جديد
 # =========================================================
-with tab2:
+elif selected_page == "📝 تسجيل جديد":
     st.subheader("إضافة عملية جديدة")
     
     if st.session_state.get('form_success_flag', False):
@@ -206,9 +226,9 @@ with tab2:
                 st.warning("المبلغ يجب أن يكون أكبر من صفر")
 
 # =========================================================
-# TAB 3: إدارة / تحصيل
+# PAGE 3: إدارة / تحصيل
 # =========================================================
-with tab3:
+elif selected_page == "💼 إدارة / تحصيل":
     st.subheader("💼 إدارة العمليات والتحصيل")
     
     if not df.empty:
@@ -228,9 +248,9 @@ with tab3:
                             "id": row['id'],
                             "transType": "income",
                             "date": str(datetime.now().date()),
-                            "customMonth": int(datetime.now().month), # ✅ تصحيح التحويل
-                            "customYear": int(datetime.now().year),   # ✅ تصحيح التحويل
-                            "amount": float(row['المبلغ']),           # ✅ تصحيح التحويل
+                            "customMonth": int(datetime.now().month),
+                            "customYear": int(datetime.now().year),
+                            "amount": float(row['المبلغ']),
                             "category": row['البند'],
                             "subCategory": row['ملاحظات'] + " (تم التحصيل)",
                             "method": "كاش"
@@ -266,15 +286,14 @@ with tab3:
                     c_btn1, c_btn2 = st.columns(2)
                     
                     if c_btn1.button("تحديث"):
-                        # 🔥🔥🔥 التصحيح هنا: تحويل القيم من numpy إلى int/float عادي 🔥🔥🔥
                         payload = {
                             "action": "edit",
                             "id": row['id'],
                             "transType": row['النوع'],
                             "date": str(row['التاريخ'].date()),
-                            "customMonth": int(row['الشهر']), # 👈 تحويل إجباري لـ int
-                            "customYear": int(row['السنة']),   # 👈 تحويل إجباري لـ int
-                            "amount": float(new_amount),       # 👈 تحويل إجباري لـ float
+                            "customMonth": int(row['الشهر']),
+                            "customYear": int(row['السنة']),
+                            "amount": float(new_amount),
                             "category": row['البند'],
                             "subCategory": new_note,
                             "method": new_method 
@@ -301,18 +320,18 @@ with tab3:
                                 st.error(f"خطأ: {msg}")
 
 # =========================================================
-# TAB 4: السجل
+# PAGE 4: السجل
 # =========================================================
-with tab4:
+elif selected_page == "📂 السجل":
     if not df.empty:
         st.dataframe(df.drop(columns=['id', 'label'], errors='ignore').sort_values(by="التاريخ", ascending=False), use_container_width=True)
     else:
         st.info("السجل فارغ.")
 
 
-
 st.markdown("---")
 st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
+
 
 
 
