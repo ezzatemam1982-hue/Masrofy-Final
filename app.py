@@ -18,8 +18,7 @@ st.set_page_config(page_title="مصروفي | Masrofy Business", page_icon=page_
 # ---------------------------------------------------------
 # 2. الرابط السحري
 # ---------------------------------------------------------
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbXgGRGb6LyZ2_34JApbNXWqvVmQNKRmxaxTWI-GMPw4Wt_UIaegOH994J8owpI1tg/exec"
-
+APPS_SCRIPT_URL = st.secrets["APPS_SCRIPT_URL"]
 # ---------------------------------------------------------
 # 3. CSS
 # ---------------------------------------------------------
@@ -352,6 +351,7 @@ elif selected_page == "📂 السجل":
 
 st.markdown("---")
 st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
+
 
 
 
