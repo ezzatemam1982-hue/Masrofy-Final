@@ -206,7 +206,7 @@ with tab2:
                 st.warning("المبلغ يجب أن يكون أكبر من صفر")
 
 # =========================================================
-# TAB 3: إدارة / تحصيل (التعديل هنا ✅)
+# TAB 3: إدارة / تحصيل
 # =========================================================
 with tab3:
     st.subheader("💼 إدارة العمليات والتحصيل")
@@ -228,9 +228,9 @@ with tab3:
                             "id": row['id'],
                             "transType": "income",
                             "date": str(datetime.now().date()),
-                            "customMonth": datetime.now().month,
-                            "customYear": datetime.now().year,
-                            "amount": row['المبلغ'],
+                            "customMonth": int(datetime.now().month), # ✅ تصحيح التحويل
+                            "customYear": int(datetime.now().year),   # ✅ تصحيح التحويل
+                            "amount": float(row['المبلغ']),           # ✅ تصحيح التحويل
                             "category": row['البند'],
                             "subCategory": row['ملاحظات'] + " (تم التحصيل)",
                             "method": "كاش"
@@ -265,29 +265,29 @@ with tab3:
                     
                     c_btn1, c_btn2 = st.columns(2)
                     
-                    # ✅ هنا التصحيح: لازم نتأكد إن ok = True
                     if c_btn1.button("تحديث"):
+                        # 🔥🔥🔥 التصحيح هنا: تحويل القيم من numpy إلى int/float عادي 🔥🔥🔥
                         payload = {
                             "action": "edit",
                             "id": row['id'],
                             "transType": row['النوع'],
                             "date": str(row['التاريخ'].date()),
-                            "customMonth": row['الشهر'], 
-                            "customYear": row['السنة'],
-                            "amount": new_amount,
+                            "customMonth": int(row['الشهر']), # 👈 تحويل إجباري لـ int
+                            "customYear": int(row['السنة']),   # 👈 تحويل إجباري لـ int
+                            "amount": float(new_amount),       # 👈 تحويل إجباري لـ float
                             "category": row['البند'],
                             "subCategory": new_note,
                             "method": new_method 
                         }
                         with st.spinner("جاري التحديث..."):
-                            ok, msg = send_to_google(payload) # 👈 لازم نستلم الرد
+                            ok, msg = send_to_google(payload)
                             if ok:
                                 st.success("تم التحديث!")
                                 time.sleep(1)
                                 st.cache_data.clear()
                                 st.rerun()
                             else:
-                                st.error(f"خطأ في جوجل شيت: {msg}") # 👈 عشان نشوف الخطأ لو فيه
+                                st.error(f"خطأ في جوجل شيت: {msg}")
 
                     if c_btn2.button("🗑️ حذف", type="primary"):
                         payload = {"action": "delete", "id": row['id']}
@@ -313,6 +313,7 @@ with tab4:
 
 st.markdown("---")
 st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
+
 
 
 
