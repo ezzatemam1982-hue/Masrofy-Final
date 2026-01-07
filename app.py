@@ -76,10 +76,15 @@ INSTALLMENT_TYPES = ["🏢 قسط الشقة الربع سنوي", "📦 أقس�
 PAYMENT_METHODS = ["💵 كاش", "💳 فيزا", "📱 محفظة", "🏦 بنك"]
 
 # ---------------------------------------------------------
-# 6. القائمة الجانبية (Navigation & Filters) - هنا الحل الجذري
+# 6. القائمة الجانبية (Navigation & Filters) - تم التصحيح ✅
 # ---------------------------------------------------------
 with st.sidebar:
-    st.image(ICON_FILE, width=80) if os.path.exists(ICON_FILE) else st.title("💎")
+    # التصحيح هنا: استخدام if عادية بدلاً من السطر المختصر
+    if os.path.exists(ICON_FILE):
+        st.image(ICON_FILE, width=80)
+    else:
+        st.title("💎")
+        
     st.title("القائمة الرئيسية")
     
     # قائمة التنقل الثابتة
@@ -92,7 +97,6 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("📅 إعدادات الفلترة")
     
-    # إعدادات الفلترة نقلناها هنا عشان تكون ثابتة
     today = datetime.now()
     years_available = sorted(list(set([today.year, today.year + 1] + (df["السنة"].tolist() if not df.empty else []))))
     
@@ -331,6 +335,7 @@ elif selected_page == "📂 السجل":
 
 st.markdown("---")
 st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
+
 
 
 
