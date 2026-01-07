@@ -130,20 +130,17 @@ with tab1:
         st.info("لا توجد بيانات.")
 
 # =========================================================
-# TAB 2: تسجيل جديد (تم الإصلاح هنا) 🛠️
+# TAB 2: تسجيل جديد
 # =========================================================
 with tab2:
     st.subheader("إضافة عملية جديدة")
     
-    # 1. التحقق من نجاح العملية السابقة وتصفير الحقول (قبل رسم الخانات)
     if st.session_state.get('form_success_flag', False):
         st.session_state.add_amount = 0.0
         st.session_state.add_note = ""
         st.session_state.add_date = datetime.now()
-        st.session_state.form_success_flag = False  # إطفاء العلامة
-        # تم التصفير بنجاح لأننا لسه مسمناش الخانات تحت
+        st.session_state.form_success_flag = False
 
-    # تهيئة المتغيرات لأول مرة
     if 'add_amount' not in st.session_state: st.session_state.add_amount = 0.0
     if 'add_note' not in st.session_state: st.session_state.add_note = ""
     if 'add_date' not in st.session_state: st.session_state.add_date = datetime.now()
@@ -199,11 +196,10 @@ with tab2:
                     ok, msg = send_to_google(payload)
                     if ok:
                         st.success(f"تم الحفظ!")
-                        # 🔥 التعديل هنا: بدل ما نصفر مباشرة، نرفع العلم ونعمل ريستارت
                         st.session_state.form_success_flag = True 
                         time.sleep(1)
                         st.cache_data.clear()
-                        st.rerun() # هذا سيعيد تشغيل الكود من السطر 1 ويصفر القيم هناك
+                        st.rerun()
                     else:
                         st.error("خطأ: " + msg)
             else:
@@ -260,9 +256,21 @@ with tab3:
                 selected_label = st.selectbox("اختر العملية:", display_df['label'].tolist())
                 if selected_label:
                     row = display_df[display_df['label'] == selected_label].iloc[0]
+                    
+                    # 1. تعديل المبلغ
                     new_amount = st.number_input("تعديل المبلغ", value=float(row['المبلغ']))
+                    
+                    # 2. تعديل طريقة الدفع (الجديد ✅)
+                    # بنحاول نلاقي الطريقة القديمة في القائمة، لو مش موجودة نختار الأولى
+                    curr_method = row['طريقة الدفع']
+                    m_idx = PAYMENT_METHODS.index(curr_method) if curr_method in PAYMENT_METHODS else 0
+                    new_method = st.selectbox("تعديل طريقة الدفع", PAYMENT_METHODS, index=m_idx)
+                    
+                    # 3. تعديل الملاحظات
                     new_note = st.text_input("تعديل الملاحظات", value=row['ملاحظات'])
+                    
                     c_btn1, c_btn2 = st.columns(2)
+                    
                     if c_btn1.button("تحديث"):
                         payload = {
                             "action": "edit",
@@ -274,10 +282,11 @@ with tab3:
                             "amount": new_amount,
                             "category": row['البند'],
                             "subCategory": new_note,
-                            "method": row['طريقة الدفع']
+                            "method": new_method # ✅ إرسال الطريقة المعدلة
                         }
                         send_to_google(payload)
-                        st.success("تم!"); st.cache_data.clear(); st.rerun()
+                        st.success("تم التحديث!"); st.cache_data.clear(); st.rerun()
+
                     if c_btn2.button("🗑️ حذف", type="primary"):
                         payload = {"action": "delete", "id": row['id']}
                         send_to_google(payload)
@@ -295,4 +304,5 @@ with tab4:
 
 st.markdown("---")
 st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
+
 
