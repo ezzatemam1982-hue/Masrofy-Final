@@ -206,7 +206,7 @@ with tab2:
                 st.warning("المبلغ يجب أن يكون أكبر من صفر")
 
 # =========================================================
-# TAB 3: إدارة / تحصيل
+# TAB 3: إدارة / تحصيل (التعديل هنا ✅)
 # =========================================================
 with tab3:
     st.subheader("💼 إدارة العمليات والتحصيل")
@@ -238,7 +238,7 @@ with tab3:
                         with st.spinner("جاري التحصيل..."):
                             ok, msg = send_to_google(payload)
                             if ok: st.success("تم!"); time.sleep(1); st.cache_data.clear(); st.rerun()
-                            else: st.error("حدث خطأ")
+                            else: st.error(f"خطأ: {msg}")
                 st.divider()
         else:
             st.success("✨ لا يوجد دخل منتظر حالياً.")
@@ -257,20 +257,15 @@ with tab3:
                 if selected_label:
                     row = display_df[display_df['label'] == selected_label].iloc[0]
                     
-                    # 1. تعديل المبلغ
                     new_amount = st.number_input("تعديل المبلغ", value=float(row['المبلغ']))
-                    
-                    # 2. تعديل طريقة الدفع (الجديد ✅)
-                    # بنحاول نلاقي الطريقة القديمة في القائمة، لو مش موجودة نختار الأولى
                     curr_method = row['طريقة الدفع']
                     m_idx = PAYMENT_METHODS.index(curr_method) if curr_method in PAYMENT_METHODS else 0
                     new_method = st.selectbox("تعديل طريقة الدفع", PAYMENT_METHODS, index=m_idx)
-                    
-                    # 3. تعديل الملاحظات
                     new_note = st.text_input("تعديل الملاحظات", value=row['ملاحظات'])
                     
                     c_btn1, c_btn2 = st.columns(2)
                     
+                    # ✅ هنا التصحيح: لازم نتأكد إن ok = True
                     if c_btn1.button("تحديث"):
                         payload = {
                             "action": "edit",
@@ -282,15 +277,28 @@ with tab3:
                             "amount": new_amount,
                             "category": row['البند'],
                             "subCategory": new_note,
-                            "method": new_method # ✅ إرسال الطريقة المعدلة
+                            "method": new_method 
                         }
-                        send_to_google(payload)
-                        st.success("تم التحديث!"); st.cache_data.clear(); st.rerun()
+                        with st.spinner("جاري التحديث..."):
+                            ok, msg = send_to_google(payload) # 👈 لازم نستلم الرد
+                            if ok:
+                                st.success("تم التحديث!")
+                                time.sleep(1)
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error(f"خطأ في جوجل شيت: {msg}") # 👈 عشان نشوف الخطأ لو فيه
 
                     if c_btn2.button("🗑️ حذف", type="primary"):
                         payload = {"action": "delete", "id": row['id']}
-                        send_to_google(payload)
-                        st.success("تم الحذف!"); st.cache_data.clear(); st.rerun()
+                        with st.spinner("جاري الحذف..."):
+                            ok, msg = send_to_google(payload)
+                            if ok:
+                                st.success("تم الحذف!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error(f"خطأ: {msg}")
 
 # =========================================================
 # TAB 4: السجل
@@ -302,7 +310,9 @@ with tab4:
         st.info("السجل فارغ.")
 
 
+
 st.markdown("---")
 st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
+
 
 
