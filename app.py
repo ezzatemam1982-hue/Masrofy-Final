@@ -19,6 +19,7 @@ st.set_page_config(page_title="مصروفي | Masrofy Business", page_icon=page_
 # 2. الرابط السحري
 # ---------------------------------------------------------
 APPS_SCRIPT_URL = st.secrets["APPS_SCRIPT_URL"]
+
 # ---------------------------------------------------------
 # 3. CSS
 # ---------------------------------------------------------
@@ -64,7 +65,7 @@ def load_data():
                     val_cat = str(row['البند'])
                     
                     # 1. لو دخل، يفضل دخل
-                    if "دخل" in val_type: return val_type
+                    if "دخل" in str(val_type): return val_type
                     
                     # 2. لو البند موجود في قائمة الأقساط، أو اسمه فيه كلمة "قسط"
                     if val_cat in INSTALLMENT_TYPES or "قسط" in val_cat or "أقساط" in val_cat:
@@ -112,7 +113,6 @@ with st.sidebar:
     
     view_year = st.selectbox("السنة", years_available, index=years_available.index(today.year) if today.year in years_available else 0)
     view_month = st.selectbox("الشهر", range(1, 13), index=today.month - 1)
-    food_budget_limit = st.number_input("🍖 ميزانية الطعام", value=5000, step=100)
     
     st.markdown("---")
     if st.button("🔄 تحديث البيانات", use_container_width=True):
@@ -130,33 +130,55 @@ if selected_page == "📊 لوحة القيادة":
         mask = (df["الشهر"] == view_month) & (df["السنة"] == view_year)
         m_df = df[mask]
         
-        # 1. الحسابات
+        # 1. الحسابات الأساسية
         inc = m_df[m_df["النوع"].str.contains("دخل") & (~m_df["النوع"].str.contains("منتظر"))]["المبلغ"].sum()
-        pending_total = df[df["النوع"]=="دخل منتظر"]["المبلغ"].sum()
         
+        # مصاريف وأقساط
         exp_only = m_df[m_df["النوع"]=="مصروفات"]["المبلغ"].sum()
         inst_only = m_df[m_df["النوع"]=="قسط"]["المبلغ"].sum()
         
-        # ✅ المعادلة التي طلبتها: الدخل - (مصروفات + أقساط)
+        # الرصيد المتبقي (الدخل - المصاريف - الأقساط)
         balance = inc - (exp_only + inst_only)
+
+        # 2. حسابات خاصة (الفيزا والدخل المنتظر)
+        pending_total = df[df["النوع"]=="دخل منتظر"]["المبلغ"].sum()
         
+        # 🔥 حساب مشتريات الفيزا لهذا الشهر 🔥
+        # بنجمع أي عملية طريقة الدفع فيها "فيزا" سواء كانت مصروف أو قسط
+        visa_total = m_df[m_df["طريقة الدفع"] == "💳 فيزا"]["المبلغ"].sum()
+        
+        # --- عرض العدادات ---
+        # الصف الأول: الملخص العام
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("💰 الدخل المحصل", f"{inc:,.0f}")
         c2.metric("💸 المصروفات", f"{exp_only:,.0f}")
         c3.metric("📅 الأقساط", f"{inst_only:,.0f}")
-        c4.metric("⏳ دخل منتظر", f"{pending_total:,.0f}", delta="خارج الحسابات")
+        c4.metric("✅ الرصيد المتبقي", f"{balance:,.0f}", delta_color="normal" if balance >= 0 else "inverse")
         
-        st.metric("✅ المتبقي من الدخل (الرصيد)", f"{balance:,.0f}", delta_color="normal" if balance >= 0 else "inverse")
+        st.markdown("<br>", unsafe_allow_html=True) # مسافة صغيرة
+
+        # الصف الثاني: التنبيهات (الفيزا والدخل المنتظر)
+        k1, k2 = st.columns(2)
+        k1.metric("💳 مستحقات الفيزا (للسداد)", f"{visa_total:,.0f}", delta="يجهز اخر الشهر", delta_color="inverse")
+        k2.metric("⏳ دخل منتظر (ليك بره)", f"{pending_total:,.0f}", delta="خارج الحسابات")
         
         st.divider()
+
+        # --- الرسومات البيانية ---
         g1, g2 = st.columns(2)
         with g1:
-            # ✅ الرسمة التي طلبتها: (مصروفات + أقساط)
+            # ✅ تجميع البيانات قبل الرسم (حل مشكلة تكرار البند)
             out_data = m_df[m_df["النوع"].isin(["مصروفات", "قسط"])]
+            
             if not out_data.empty:
-                st.subheader("أين يذهب الدخل؟ (مصاريف وأقساط)")
-                # رسمة الدونات المجوفة عشان تكون أوضح
-                fig = px.pie(out_data, values='المبلغ', names='البند', hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
+                st.subheader("توزيع المصاريف والأقساط")
+                
+                # 🔥 كود التجميع السحري 🔥
+                # يقوم بجمع المبالغ للمصروفات التي لها نفس الاسم
+                grouped_chart_data = out_data.groupby('البند', as_index=False)['المبلغ'].sum()
+                
+                # رسمة الدونات المجوفة
+                fig = px.pie(grouped_chart_data, values='المبلغ', names='البند', hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
                 fig.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig, use_container_width=True)
             else:
@@ -166,9 +188,11 @@ if selected_page == "📊 لوحة القيادة":
             inc_data = m_df[m_df["النوع"] == "دخل"]
             if not inc_data.empty:
                 st.subheader("مصادر الدخل")
-                st.plotly_chart(px.bar(inc_data, x="البند", y="المبلغ", color="البند"), use_container_width=True)
+                # تجميع الدخل أيضاً لضمان عدم التكرار
+                grouped_inc_data = inc_data.groupby('البند', as_index=False)['المبلغ'].sum()
+                st.plotly_chart(px.bar(grouped_inc_data, x="البند", y="المبلغ", color="البند"), use_container_width=True)
     else:
-        st.info("لا توجد بيانات.")
+        st.info("لا توجد بيانات لهذا الشهر.")
 
 # PAGE 2: تسجيل جديد
 elif selected_page == "📝 تسجيل جديد":
