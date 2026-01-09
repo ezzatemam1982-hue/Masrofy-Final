@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -59,19 +60,21 @@ def load_data():
                 for col in ["النوع", "البند", "طريقة الدفع", "ملاحظات"]:
                     if col not in df.columns: df[col] = ""
                 
+                # 🔥 كود التنظيف الجديد (إزالة المسافات المخفية) 🔥
+                # ده هيخلي "فطار شغل " تبقى "فطار شغل"
+                df["البند"] = df["البند"].astype(str).str.strip()
+                df["طريقة الدفع"] = df["طريقة الدفع"].astype(str).str.strip()
+
                 # 🔥 التصنيف الذكي (v12) 🔥
                 def classify_type(row):
                     val_type = str(row['النوع'])
                     val_cat = str(row['البند'])
                     
-                    # 1. لو دخل، يفضل دخل
                     if "دخل" in str(val_type): return val_type
                     
-                    # 2. لو البند موجود في قائمة الأقساط، أو اسمه فيه كلمة "قسط"
                     if val_cat in INSTALLMENT_TYPES or "قسط" in val_cat or "أقساط" in val_cat:
                         return "قسط"
                     
-                    # 3. غير كده يبقى مصروفات
                     return "مصروفات"
 
                 if not df.empty:
@@ -130,54 +133,44 @@ if selected_page == "📊 لوحة القيادة":
         mask = (df["الشهر"] == view_month) & (df["السنة"] == view_year)
         m_df = df[mask]
         
-        # 1. الحسابات الأساسية
         inc = m_df[m_df["النوع"].str.contains("دخل") & (~m_df["النوع"].str.contains("منتظر"))]["المبلغ"].sum()
         
-        # مصاريف وأقساط
         exp_only = m_df[m_df["النوع"]=="مصروفات"]["المبلغ"].sum()
         inst_only = m_df[m_df["النوع"]=="قسط"]["المبلغ"].sum()
         
-        # الرصيد المتبقي (الدخل - المصاريف - الأقساط)
         balance = inc - (exp_only + inst_only)
-
-        # 2. حسابات خاصة (الفيزا والدخل المنتظر)
         pending_total = df[df["النوع"]=="دخل منتظر"]["المبلغ"].sum()
         
-        # 🔥 حساب مشتريات الفيزا لهذا الشهر 🔥
-        # بنجمع أي عملية طريقة الدفع فيها "فيزا" سواء كانت مصروف أو قسط
+        # 🔥 تجميع الفيزا (تم إضافة كود التنظيف هنا أيضاً للأمان) 🔥
+        m_df["طريقة الدفع"] = m_df["طريقة الدفع"].astype(str).str.strip()
         visa_total = m_df[m_df["طريقة الدفع"] == "💳 فيزا"]["المبلغ"].sum()
         
-        # --- عرض العدادات ---
-        # الصف الأول: الملخص العام
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("💰 الدخل المحصل", f"{inc:,.0f}")
         c2.metric("💸 المصروفات", f"{exp_only:,.0f}")
         c3.metric("📅 الأقساط", f"{inst_only:,.0f}")
         c4.metric("✅ الرصيد المتبقي", f"{balance:,.0f}", delta_color="normal" if balance >= 0 else "inverse")
         
-        st.markdown("<br>", unsafe_allow_html=True) # مسافة صغيرة
+        st.markdown("<br>", unsafe_allow_html=True) 
 
-        # الصف الثاني: التنبيهات (الفيزا والدخل المنتظر)
         k1, k2 = st.columns(2)
         k1.metric("💳 مستحقات الفيزا (للسداد)", f"{visa_total:,.0f}", delta="يجهز اخر الشهر", delta_color="inverse")
         k2.metric("⏳ دخل منتظر (ليك بره)", f"{pending_total:,.0f}", delta="خارج الحسابات")
         
         st.divider()
 
-        # --- الرسومات البيانية ---
         g1, g2 = st.columns(2)
         with g1:
-            # ✅ تجميع البيانات قبل الرسم (حل مشكلة تكرار البند)
+            # ✅ الفلترة للرسم البياني
             out_data = m_df[m_df["النوع"].isin(["مصروفات", "قسط"])]
             
             if not out_data.empty:
                 st.subheader("توزيع المصاريف والأقساط")
                 
-                # 🔥 كود التجميع السحري 🔥
-                # يقوم بجمع المبالغ للمصروفات التي لها نفس الاسم
+                # 🔥 كود التجميع السحري (بعد التنظيف) 🔥
+                # هنا هيجمع أي حاجة ليها نفس الاسم بالظبط
                 grouped_chart_data = out_data.groupby('البند', as_index=False)['المبلغ'].sum()
                 
-                # رسمة الدونات المجوفة
                 fig = px.pie(grouped_chart_data, values='المبلغ', names='البند', hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
                 fig.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig, use_container_width=True)
@@ -188,7 +181,6 @@ if selected_page == "📊 لوحة القيادة":
             inc_data = m_df[m_df["النوع"] == "دخل"]
             if not inc_data.empty:
                 st.subheader("مصادر الدخل")
-                # تجميع الدخل أيضاً لضمان عدم التكرار
                 grouped_inc_data = inc_data.groupby('البند', as_index=False)['المبلغ'].sum()
                 st.plotly_chart(px.bar(grouped_inc_data, x="البند", y="المبلغ", color="البند"), use_container_width=True)
     else:
@@ -375,6 +367,7 @@ elif selected_page == "📂 السجل":
 
 st.markdown("---")
 st.caption("Masrofy v2 | Business Edition by Ezzat Emam 💼")
+
 
 
 
